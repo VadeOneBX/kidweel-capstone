@@ -29,9 +29,16 @@ def _fmt_decimal2(value: float) -> str:
     return f"{value:.2f}"
 
 
+def _fmt_pct(value: float) -> str:
+    """Format a fractional rate (0–1) as a percentage for evidence display."""
+    if not math.isfinite(value):
+        return str(value)
+    return f"{100.0 * value:.1f}%"
+
+
 def _fmt_pf(value: float) -> str:
     if value == math.inf:
-        return "inf"
+        return "N/A (no losses)"
     if value == -math.inf:
         return "-inf"
     if not math.isfinite(value):
@@ -61,11 +68,11 @@ def format_evidence_block(
         lines.append(f"Max Drawdown (PnL): {_fmt_decimal2(summary.max_drawdown)}")
     lines.extend(
         [
-            f"Win Rate: {_fmt_decimal2(summary.win_rate)}",
-            f"Stop Rate (STOP share): {_fmt_decimal2(stop_share)}",
+            f"Win Rate: {_fmt_pct(summary.win_rate)}",
+            f"Stop Rate (STOP share): {_fmt_pct(stop_share)}",
             "",
             f"Avg RR: {_fmt_decimal2(summary.avg_rr)}",
-            f"Avg PMP: {_fmt_decimal2(summary.avg_pmp)}",
+            f"Avg PMP: {_fmt_pct(summary.avg_pmp)}",
             "",
             f"Validation: {validation.status.value}",
             "",
@@ -83,7 +90,7 @@ def format_evidence_block(
                 f"  Net PnL: {_fmt_decimal2(seg['net_pnl'])}",
                 f"  PF: {_fmt_pf(seg['profit_factor'])}",
                 f"  Sharpe: {_fmt_decimal2(seg['sharpe'])}",
-                f"  Stop Loss Rate: {_fmt_decimal2(float(slr))}",
+                f"  Stop Loss Rate: {_fmt_pct(float(slr))}",
                 "",
             ]
         )
@@ -103,7 +110,7 @@ def format_evidence_block(
                 f"  Net PnL: {_fmt_decimal2(seg['net_pnl'])}",
                 f"  PF: {_fmt_pf(seg['profit_factor'])}",
                 f"  Sharpe: {_fmt_decimal2(seg['sharpe'])}",
-                f"  Stop Loss Rate: {_fmt_decimal2(float(slr))}",
+                f"  Stop Loss Rate: {_fmt_pct(float(slr))}",
                 "",
             ]
         )
