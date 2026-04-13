@@ -55,3 +55,22 @@ def validate_backtest_summary(
         summary=summary,
         research_mode_exception=research_mode_exception,
     )
+
+
+def build_segment_metrics(
+    pnls: list[float],
+    sharpe: float,
+    stop_loss_rate: float | None = None,
+) -> dict:
+    """
+    Return a compact metrics dictionary for grouped reporting.
+
+    Keys are stable: trades, net_pnl, profit_factor, sharpe, stop_loss_rate.
+    """
+    return {
+        "trades": len(pnls),
+        "net_pnl": total_pnl(pnls),
+        "profit_factor": profit_factor(pnls),
+        "sharpe": sharpe,
+        "stop_loss_rate": stop_loss_rate if stop_loss_rate is not None else 0.0,
+    }

@@ -9,6 +9,7 @@ import math
 # Schema changes must be explicit, additive where possible, and updated across all
 # dependents in the same packet.
 
+from qops.backtest.replay_context import ReplayContext
 from qops.schemas.backtest import BacktestTradeLogRow
 
 
@@ -41,8 +42,10 @@ def build_trade_log_row(
         raise ValueError("playbook must be non-empty")
     if not entry_date.strip() or not exit_date.strip() or not expiry.strip():
         raise ValueError("entry_date, exit_date, and expiry must be non-empty")
-    if not (0 <= confidence <= 100):
-        raise ValueError("confidence must be between 0 and 100")
+    if isinstance(confidence, bool) or not isinstance(confidence, int):
+        raise ValueError("confidence must be an integer on the 0–10 scale")
+    if not (0 <= confidence <= 10):
+        raise ValueError("confidence must be between 0 and 10 inclusive")
     if debit_or_credit <= 0.0 or not math.isfinite(debit_or_credit):
         raise ValueError("debit_or_credit must be finite and > 0")
     if max_profit <= 0.0 or not math.isfinite(max_profit):
@@ -78,4 +81,31 @@ def build_trade_log_row(
         exit_reason=exit_reason,
         pnl=pnl,
         candidate_alternatives=candidate_alternatives,
+    )
+
+
+def build_trade_log_row_from_context(ctx: ReplayContext) -> BacktestTradeLogRow:
+    """Build a validated BacktestTradeLogRow from ReplayContext."""
+    structure = ctx.structure
+    evaluation = ctx.evaluation
+    return build_trade_log_row(
+        symbol=ctx.symbol,
+        playbook=ctx.playbook,
+        entry_date=ctx.entry_date,
+        exit_date=ctx.exit_date,
+        expiry=structure.expiry,
+        regime_label=structure.regime_label.value,
+        confidence=structure.confidence,
+        iv_state=structure.iv_state.value,
+        skew_state=structure.skew_state.value,
+        wall_state=structure.wall_state.value,
+        environment_label=ctx.environment_label,
+        pmp=evaluation.pmp,
+        rr_actual=structure.rr_actual,
+        debit_or_credit=structure.debit_or_credit,
+        max_profit=structure.max_profit,
+        max_loss=structure.max_loss,
+        exit_reason=ctx.exit_reason,
+        pnl=ctx.realized_pnl,
+        candidate_alternatives=ctx.candidate_alternatives,
     )

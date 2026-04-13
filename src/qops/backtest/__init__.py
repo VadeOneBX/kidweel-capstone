@@ -1,18 +1,40 @@
-"""Backtest metrics and summary helpers (no runner in this packet)."""
+"""Backtest metrics, summary helpers, replay context, and iterative runner."""
 
 from __future__ import annotations
 
-from qops.backtest.metrics import average_trade, loss_rate, profit_factor, total_pnl, win_rate
-from qops.backtest.summary import build_backtest_summary, validate_backtest_summary
-from qops.backtest.trade_log import build_trade_log_row
+from qops.backtest.metrics import (
+    average_trade,
+    loss_rate,
+    max_drawdown_from_pnls,
+    profit_factor,
+    sharpe_from_pnls,
+    stop_hit_rate,
+    stop_loss_rate,
+    total_pnl,
+    win_rate,
+)
+from qops.backtest.replay_context import ReplayContext, validate_replay_context
+from qops.backtest.runner import format_evidence_block, run_iterative_backtest
+from qops.backtest.summary import build_backtest_summary, build_segment_metrics, validate_backtest_summary
+from qops.backtest.trade_log import build_trade_log_row, build_trade_log_row_from_context
 
 __all__ = [
+    "ReplayContext",
     "average_trade",
     "build_backtest_summary",
+    "build_segment_metrics",
     "build_trade_log_row",
+    "build_trade_log_row_from_context",
+    "format_evidence_block",
     "loss_rate",
+    "max_drawdown_from_pnls",
     "profit_factor",
+    "run_iterative_backtest",
+    "sharpe_from_pnls",
+    "stop_hit_rate",
+    "stop_loss_rate",
     "total_pnl",
     "validate_backtest_summary",
+    "validate_replay_context",
     "win_rate",
 ]
