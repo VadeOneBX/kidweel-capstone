@@ -13,23 +13,38 @@ from qops.backtest.metrics import (
     total_pnl,
     win_rate,
 )
+from qops.backtest.overlay_filter import (
+    filter_contexts_by_overlay,
+    run_overlay_comparison,
+    run_overlay_variant_comparisons,
+)
 from qops.backtest.replay_context import ReplayContext, validate_replay_context
-from qops.backtest.runner import format_evidence_block, run_iterative_backtest
-from qops.backtest.summary import build_backtest_summary, build_segment_metrics, validate_backtest_summary
+from qops.backtest.runner import format_evidence_block, format_metric_value, run_iterative_backtest
+from qops.backtest.summary import (
+    build_backtest_summary,
+    build_overlay_metrics,
+    build_segment_metrics,
+    validate_backtest_summary,
+)
 from qops.backtest.trade_log import build_trade_log_row, build_trade_log_row_from_context
 
 __all__ = [
     "ReplayContext",
     "average_trade",
     "build_backtest_summary",
+    "build_overlay_metrics",
     "build_segment_metrics",
     "build_trade_log_row",
     "build_trade_log_row_from_context",
     "format_evidence_block",
+    "format_metric_value",
+    "filter_contexts_by_overlay",
     "loss_rate",
     "max_drawdown_from_pnls",
     "profit_factor",
     "run_iterative_backtest",
+    "run_overlay_comparison",
+    "run_overlay_variant_comparisons",
     "sharpe_from_pnls",
     "stop_hit_rate",
     "stop_loss_rate",

@@ -11,7 +11,12 @@ from qops.backtest.metrics import (
     stop_loss_rate,
 )
 from qops.backtest.replay_context import ReplayContext, validate_replay_context
-from qops.backtest.summary import build_backtest_summary, build_segment_metrics, validate_backtest_summary
+from qops.backtest.summary import (
+    build_backtest_summary,
+    build_overlay_metrics,
+    build_segment_metrics,
+    validate_backtest_summary,
+)
 from qops.backtest.trade_log import build_trade_log_row_from_context
 
 # Schemas are canonical handoff contracts.
@@ -29,6 +34,25 @@ def _fmt_decimal2(value: float) -> str:
     return f"{value:.2f}"
 
 
+def format_metric_value(value: float, *, signed: bool = False) -> str:
+    """
+    Return a stable display string for artifact output.
+
+    Rules:
+    - inf -> "INF" or "+INF" if signed=True
+    - -inf -> "-INF"
+    - nan -> "N/A"
+    - finite floats -> format to 2 decimals, with optional sign
+    """
+    if math.isnan(value):
+        return "N/A"
+    if value == math.inf:
+        return "+INF" if signed else "INF"
+    if value == -math.inf:
+        return "-INF"
+    return f"{value:+.2f}" if signed else f"{value:.2f}"
+
+
 def _fmt_pct(value: float) -> str:
     """Format a fractional rate (0–1) as a percentage for evidence display."""
     if not math.isfinite(value):
@@ -37,13 +61,12 @@ def _fmt_pct(value: float) -> str:
 
 
 def _fmt_pf(value: float) -> str:
-    if value == math.inf:
-        return "N/A (no losses)"
-    if value == -math.inf:
-        return "-inf"
-    if not math.isfinite(value):
-        return str(value)
-    return f"{value:.2f}"
+    return format_metric_value(value)
+
+
+def _fmt_signed_decimal2(value: float) -> str:
+    """Format signed finite float with explicit sign and two decimals."""
+    return format_metric_value(value, signed=True)
 
 
 def format_evidence_block(
@@ -51,6 +74,8 @@ def format_evidence_block(
     validation: BacktestValidationResult,
     playbook_metrics: dict,
     environment_metrics: dict,
+    overlay_metrics: dict | None = None,
+    overlay_comparison: dict | None = None,
 ) -> str:
     """Return a human-readable evidence block for reporting."""
     stop_share = summary.stop_loss_rate if summary.stop_loss_rate is not None else 0.0
@@ -114,6 +139,58 @@ def format_evidence_block(
                 "",
             ]
         )
+    if overlay_metrics:
+        lines.extend(
+            [
+                "",
+                "Overlay Performance",
+                "-------------------",
+            ]
+        )
+        for key in sorted(overlay_metrics.keys()):
+            seg = overlay_metrics[key]
+            slr = seg.get("stop_loss_rate", 0.0)
+            lines.extend(
+                [
+                    f"{key}:",
+                    f"  Trades: {seg['trades']}",
+                    f"  Net PnL: {_fmt_decimal2(seg['net_pnl'])}",
+                    f"  PF: {_fmt_pf(seg['profit_factor'])}",
+                    f"  Sharpe: {_fmt_decimal2(seg['sharpe'])}",
+                    f"  Stop Loss Rate: {_fmt_pct(float(slr))}",
+                    "",
+                ]
+            )
+    if overlay_comparison:
+        baseline = overlay_comparison.get("baseline")
+        filtered = overlay_comparison.get("exclude_downgraded")
+        delta = overlay_comparison.get("delta")
+        if delta is None:
+            delta = overlay_comparison.get("delta_vs_baseline", {}).get("exclude_downgraded")
+        if baseline is not None and filtered is not None and delta is not None:
+            bsum = baseline.get("summary")
+            fsum = filtered.get("summary")
+            if bsum is not None and fsum is not None:
+                lines.extend(
+                    [
+                        "",
+                        "Overlay Comparison",
+                        "------------------",
+                        "Baseline:",
+                        f"  Trades: {bsum.total_trades}",
+                        f"  PF: {_fmt_pf(bsum.profit_factor)}",
+                        f"  Sharpe: {_fmt_decimal2(bsum.sharpe)}",
+                        "Exclude Downgraded:",
+                        f"  Trades: {fsum.total_trades}",
+                        f"  PF: {_fmt_pf(fsum.profit_factor)}",
+                        f"  Sharpe: {_fmt_decimal2(fsum.sharpe)}",
+                        "Delta:",
+                        f"  Trades Removed: {delta.get('trades_removed', 0)}",
+                        f"  Net PnL Change: {_fmt_signed_decimal2(float(delta.get('net_pnl_change', 0.0)))}",
+                        f"  PF Change: {_fmt_signed_decimal2(float(delta.get('profit_factor_change', 0.0)))}",
+                        f"  Sharpe Change: {_fmt_signed_decimal2(float(delta.get('sharpe_change', 0.0)))}",
+                    ]
+                )
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -140,7 +217,7 @@ def run_iterative_backtest(
     Run deterministic backtest aggregation over replay contexts.
 
     Returns a dictionary containing summary, validation, trade_log, playbook_metrics,
-    environment_metrics, and evidence_block.
+    environment_metrics, overlay_metrics, and evidence_block.
     """
     trade_log: list[BacktestTradeLogRow] = []
     pnls: list[float] = []
@@ -193,12 +270,14 @@ def run_iterative_backtest(
 
     playbook_metrics = _bucket_segment_metrics(playbook_pnls, playbook_exits)
     environment_metrics = _bucket_segment_metrics(env_pnls, env_exits)
+    overlay_metrics = build_overlay_metrics(contexts)
 
     evidence_block = format_evidence_block(
         summary=summary,
         validation=validation,
         playbook_metrics=playbook_metrics,
         environment_metrics=environment_metrics,
+        overlay_metrics=overlay_metrics,
     )
 
     return {
@@ -207,5 +286,6 @@ def run_iterative_backtest(
         "trade_log": trade_log,
         "playbook_metrics": playbook_metrics,
         "environment_metrics": environment_metrics,
+        "overlay_metrics": overlay_metrics,
         "evidence_block": evidence_block,
     }
