@@ -74,6 +74,12 @@ class BacktestTradeLogRow:
     pnl: float
     candidate_alternatives: list[str] | None
 
+    overlay_surface_state: str | None = None
+    overlay_market_state: str | None = None
+    overlay_term_structure_state: str | None = None
+    overlay_caution_flag: bool | None = None
+    overlay_downgrade_flag: bool | None = None
+
 
 def evaluate_backtest_gate(
     summary: BacktestSummary,

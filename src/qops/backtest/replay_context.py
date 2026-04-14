@@ -10,6 +10,7 @@ from dataclasses import dataclass
 # Schema changes must be explicit, additive where possible, and updated across all
 # dependents in the same packet.
 
+from qops.overlay.models import OverlayAssessment
 from qops.schemas.risk import TradeEvaluation
 from qops.schemas.structure import TradeStructureCandidate
 
@@ -44,6 +45,8 @@ class ReplayContext:
 
     environment_label: str
     candidate_alternatives: list[str] | None = None
+
+    overlay: OverlayAssessment | None = None
 
 
 def validate_replay_context(ctx: ReplayContext) -> None:
@@ -80,3 +83,6 @@ def validate_replay_context(ctx: ReplayContext) -> None:
         raise ValueError("ctx.playbook must match structure.allowed_playbook")
     if ctx.playbook != ctx.evaluation.playbook:
         raise ValueError("ctx.playbook must match evaluation.playbook")
+
+    if ctx.overlay is not None and not isinstance(ctx.overlay, OverlayAssessment):
+        raise TypeError("overlay must be OverlayAssessment or None")

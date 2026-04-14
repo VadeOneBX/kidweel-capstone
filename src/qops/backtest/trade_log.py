@@ -34,6 +34,11 @@ def build_trade_log_row(
     exit_reason: str,
     pnl: float,
     candidate_alternatives: list[str] | None = None,
+    overlay_surface_state: str | None = None,
+    overlay_market_state: str | None = None,
+    overlay_term_structure_state: str | None = None,
+    overlay_caution_flag: bool | None = None,
+    overlay_downgrade_flag: bool | None = None,
 ) -> BacktestTradeLogRow:
     """Build a validated BacktestTradeLogRow."""
     if not symbol.strip():
@@ -81,6 +86,11 @@ def build_trade_log_row(
         exit_reason=exit_reason,
         pnl=pnl,
         candidate_alternatives=candidate_alternatives,
+        overlay_surface_state=overlay_surface_state,
+        overlay_market_state=overlay_market_state,
+        overlay_term_structure_state=overlay_term_structure_state,
+        overlay_caution_flag=overlay_caution_flag,
+        overlay_downgrade_flag=overlay_downgrade_flag,
     )
 
 
@@ -88,6 +98,19 @@ def build_trade_log_row_from_context(ctx: ReplayContext) -> BacktestTradeLogRow:
     """Build a validated BacktestTradeLogRow from ReplayContext."""
     structure = ctx.structure
     evaluation = ctx.evaluation
+    overlay = ctx.overlay
+    overlay_surface: str | None = None
+    overlay_market: str | None = None
+    overlay_term: str | None = None
+    overlay_caution: bool | None = None
+    overlay_downgrade: bool | None = None
+    if overlay is not None:
+        overlay_surface = overlay.surface_state
+        overlay_market = overlay.market_state
+        overlay_term = overlay.term_structure_state
+        overlay_caution = overlay.caution_flag
+        overlay_downgrade = overlay.downgrade_flag
+
     return build_trade_log_row(
         symbol=ctx.symbol,
         playbook=ctx.playbook,
@@ -108,4 +131,9 @@ def build_trade_log_row_from_context(ctx: ReplayContext) -> BacktestTradeLogRow:
         exit_reason=ctx.exit_reason,
         pnl=ctx.realized_pnl,
         candidate_alternatives=ctx.candidate_alternatives,
+        overlay_surface_state=overlay_surface,
+        overlay_market_state=overlay_market,
+        overlay_term_structure_state=overlay_term,
+        overlay_caution_flag=overlay_caution,
+        overlay_downgrade_flag=overlay_downgrade,
     )
