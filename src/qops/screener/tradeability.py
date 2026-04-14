@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from qops.schemas.candidate import ScreenedCandidate
 from qops.schemas.playbook import AllowedPlaybook
+from qops.signals.classifier import PremiumPosture, SignalType
+from qops.signals.constants import WALL_REVERSAL_MAX_DISTANCE_PCT
 from qops.strategy.constants import MIN_DTE
 
 _EXECUTABLE_PLAYBOOKS: frozenset[AllowedPlaybook] = frozenset(
@@ -36,6 +38,8 @@ def is_tradeable(candidate: ScreenedCandidate) -> tuple[bool, str]:
         return False, "liquidity_flag_false"
     if not has_minimum_dte(candidate, MIN_DTE):
         return False, f"dte_below_minimum_{MIN_DTE}"
+    if not candidate.dte_alignment_pass:
+        return False, "dte_alignment_pass_false"
 
     if candidate.allowed_playbook == AllowedPlaybook.SKIP:
         return False, "allowed_playbook_skip_non_executable"
@@ -45,5 +49,19 @@ def is_tradeable(candidate: ScreenedCandidate) -> tuple[bool, str]:
         return False, "allowed_playbook_long_gamma_hedge_non_executable"
     if candidate.allowed_playbook not in _EXECUTABLE_PLAYBOOKS:
         return False, "allowed_playbook_not_supported_in_packet"
+
+    if candidate.signal_type == SignalType.WALL_REVERSAL:
+        if candidate.wall_distance_pct is None:
+            return False, "wall_reversal_wall_distance_missing"
+        if candidate.wall_distance_pct > WALL_REVERSAL_MAX_DISTANCE_PCT:
+            return False, "wall_reversal_wall_distance_too_far"
+        if candidate.signal_strength == "LOW":
+            return False, "wall_reversal_signal_strength_low"
+
+    if (
+        candidate.allowed_playbook in _EXECUTABLE_PLAYBOOKS
+        and candidate.premium_posture == PremiumPosture.PREMIUM_AVOID
+    ):
+        return False, "premium_posture_avoid_for_premium_buying_playbook"
 
     return True, "tradeable"

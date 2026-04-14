@@ -11,6 +11,8 @@ import math
 
 from qops.schemas.candidate import ScreenedCandidate
 from qops.schemas.playbook import AllowedPlaybook, StructureBias
+from qops.signals.classifier import GammaRegimeState, PremiumPosture, SignalType, VolTriggerRelation
+from qops.signals.horizon import signal_horizon_days
 
 _EXECUTABLE_PLAYBOOKS: frozenset[AllowedPlaybook] = frozenset(
     {
@@ -53,6 +55,45 @@ def normalize_candidate(candidate: ScreenedCandidate) -> ScreenedCandidate:
             raise ValueError("executable candidate requires tradeability_pass=True")
         if not candidate.liquidity_pass:
             raise ValueError("executable candidate requires liquidity_pass=True")
+
+    if not isinstance(candidate.signal_type, SignalType):
+        raise ValueError("candidate.signal_type must be SignalType")
+    if (
+        not isinstance(candidate.signal_horizon_days, tuple)
+        or len(candidate.signal_horizon_days) != 2
+        or not all(isinstance(v, int) for v in candidate.signal_horizon_days)
+    ):
+        raise ValueError("candidate.signal_horizon_days must be tuple[int, int]")
+    min_days, max_days = candidate.signal_horizon_days
+    if min_days < 0 or max_days < min_days:
+        raise ValueError("candidate.signal_horizon_days must be coherent and non-negative")
+    expected_horizon = signal_horizon_days(candidate.signal_type)
+    if candidate.signal_horizon_days != expected_horizon:
+        raise ValueError("candidate.signal_horizon_days must match canonical signal_type horizon")
+
+    if candidate.wall_distance_pct is not None:
+        if not math.isfinite(candidate.wall_distance_pct) or candidate.wall_distance_pct < 0.0:
+            raise ValueError("candidate.wall_distance_pct must be None or finite >= 0")
+
+    if candidate.signal_strength not in {"HIGH", "MEDIUM", "LOW", "UNKNOWN"}:
+        raise ValueError("candidate.signal_strength must be one of HIGH, MEDIUM, LOW, UNKNOWN")
+
+    if candidate.vol_trigger is not None and (
+        not math.isfinite(candidate.vol_trigger) or candidate.vol_trigger <= 0.0
+    ):
+        raise ValueError("candidate.vol_trigger must be None or finite > 0")
+    if not isinstance(candidate.vol_trigger_relation, VolTriggerRelation):
+        raise ValueError("candidate.vol_trigger_relation must be VolTriggerRelation")
+    if not isinstance(candidate.gamma_regime_state, GammaRegimeState):
+        raise ValueError("candidate.gamma_regime_state must be GammaRegimeState")
+    if not isinstance(candidate.premium_posture, PremiumPosture):
+        raise ValueError("candidate.premium_posture must be PremiumPosture")
+
+    expected_alignment = min_days <= candidate.dte_target <= max_days
+    if candidate.signal_type == SignalType.NONE:
+        expected_alignment = True
+    if candidate.dte_alignment_pass != expected_alignment:
+        raise ValueError("candidate.dte_alignment_pass is inconsistent with signal_horizon_days")
 
     if (
         candidate.allowed_playbook == AllowedPlaybook.BULL_CALL_SPREAD

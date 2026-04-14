@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 from qops.schemas.environment import DirectionalBias, IVState, RegimeLabel, SkewState, WallState
 from qops.schemas.playbook import AllowedPlaybook, StructureBias
+from qops.signals.classifier import GammaRegimeState, PremiumPosture, SignalType, VolTriggerRelation
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +45,16 @@ class ScreenedCandidate:
 
     wall_state: WallState
     directional_bias: DirectionalBias
+
+    signal_type: SignalType
+    signal_horizon_days: tuple[int, int]
+    wall_distance_pct: float | None
+    signal_strength: str
+    vol_trigger: float | None
+    vol_trigger_relation: VolTriggerRelation
+    gamma_regime_state: GammaRegimeState
+    premium_posture: PremiumPosture
+    dte_alignment_pass: bool
 
     allowed_playbook: AllowedPlaybook
 

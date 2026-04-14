@@ -1,0 +1,14 @@
+"""Deterministic constants for signal alignment and posture scaffolding."""
+
+from __future__ import annotations
+
+WALL_REVERSAL_MAX_DISTANCE_PCT = 0.01
+WALL_REVERSAL_SOFT_DISTANCE_PCT = 0.02
+
+SQUEEZE_HORIZON_MIN_DAYS = 7
+SQUEEZE_HORIZON_MAX_DAYS = 14
+
+WALL_REVERSAL_HORIZON_MIN_DAYS = 1
+WALL_REVERSAL_HORIZON_MAX_DAYS = 5
+
+VOL_TRIGGER_AT_BAND = 0.0025
