@@ -80,6 +80,14 @@ class BacktestTradeLogRow:
     overlay_caution_flag: bool | None = None
     overlay_downgrade_flag: bool | None = None
 
+    claude_source_type: str | None = None
+    claude_file_regime_label: str | None = None
+    claude_file_confidence: int | None = None
+    claude_session_reliability_state: str | None = None
+    claude_context_note: str | None = None
+    claude_confidence_adjustment_note: str | None = None
+    claude_classification_note: str | None = None
+
 
 def evaluate_backtest_gate(
     summary: BacktestSummary,

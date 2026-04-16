@@ -158,3 +158,31 @@ def build_overlay_metrics(contexts: list[ReplayContext]) -> dict[str, dict]:
         _add(f"overlay_surface={surf}", pnls, exits)
 
     return out
+
+
+def build_claude_context_metrics(contexts: list[ReplayContext]) -> dict:
+    """
+    Return compact grouped metrics by:
+    - claude_context present/absent
+    - session_reliability_state
+    - source_type
+    """
+    present = 0
+    absent = 0
+    by_state: dict[str, int] = {}
+    by_source: dict[str, int] = {}
+    for ctx in contexts:
+        cc = ctx.claude_context
+        if cc is None:
+            absent += 1
+        else:
+            present += 1
+            st = cc.session_reliability_state if cc.session_reliability_state is not None else "None"
+            by_state[st] = by_state.get(st, 0) + 1
+            by_source[cc.source_type] = by_source.get(cc.source_type, 0) + 1
+    return {
+        "claude_context_present": present,
+        "claude_context_absent": absent,
+        "by_session_reliability_state": dict(sorted(by_state.items())),
+        "by_source_type": dict(sorted(by_source.items())),
+    }

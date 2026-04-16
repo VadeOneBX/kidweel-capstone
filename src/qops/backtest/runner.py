@@ -76,6 +76,7 @@ def format_evidence_block(
     environment_metrics: dict,
     overlay_metrics: dict | None = None,
     overlay_comparison: dict | None = None,
+    claude_comparison: dict | None = None,
 ) -> str:
     """Return a human-readable evidence block for reporting."""
     stop_share = summary.stop_loss_rate if summary.stop_loss_rate is not None else 0.0
@@ -191,6 +192,62 @@ def format_evidence_block(
                         f"  Sharpe Change: {_fmt_signed_decimal2(float(delta.get('sharpe_change', 0.0)))}",
                     ]
                 )
+    if claude_comparison:
+        base = claude_comparison.get("baseline")
+        ex_mat = claude_comparison.get("exclude_materially_changed")
+        ex_weak = claude_comparison.get("exclude_weakened_or_worse")
+        cl_only = claude_comparison.get("claude_only")
+        dvb = claude_comparison.get("delta_vs_baseline") or {}
+        if base is not None and ex_mat is not None and ex_weak is not None and cl_only is not None:
+            bsum = base.get("summary")
+            msum = ex_mat.get("summary")
+            wsum = ex_weak.get("summary")
+            csum = cl_only.get("summary")
+            if bsum is not None and msum is not None and wsum is not None and csum is not None:
+                lines.extend(
+                    [
+                        "",
+                        "Claude Context Comparison",
+                        "-------------------------",
+                        "Baseline:",
+                        f"  Trades: {bsum.total_trades}",
+                        f"  PF: {_fmt_pf(bsum.profit_factor)}",
+                        f"  Sharpe: {_fmt_decimal2(bsum.sharpe)}",
+                        "",
+                        "Exclude Materially Changed:",
+                        f"  Trades: {msum.total_trades}",
+                        f"  PF: {_fmt_pf(msum.profit_factor)}",
+                        f"  Sharpe: {_fmt_decimal2(msum.sharpe)}",
+                        "",
+                        "Exclude Weakened Or Worse:",
+                        f"  Trades: {wsum.total_trades}",
+                        f"  PF: {_fmt_pf(wsum.profit_factor)}",
+                        f"  Sharpe: {_fmt_decimal2(wsum.sharpe)}",
+                        "",
+                        "Claude Only:",
+                        f"  Trades: {csum.total_trades}",
+                        f"  PF: {_fmt_pf(csum.profit_factor)}",
+                        f"  Sharpe: {_fmt_decimal2(csum.sharpe)}",
+                        "",
+                        "Delta:",
+                    ]
+                )
+                for label, key in (
+                    ("Exclude Materially Changed", "exclude_materially_changed"),
+                    ("Exclude Weakened Or Worse", "exclude_weakened_or_worse"),
+                    ("Claude Only", "claude_only"),
+                ):
+                    d = dvb.get(key)
+                    if isinstance(d, dict):
+                        lines.extend(
+                            [
+                                f"  {label}:",
+                                f"    Trades Removed: {d.get('trades_removed', 0)}",
+                                f"    Net PnL Change: {_fmt_signed_decimal2(float(d.get('net_pnl_change', 0.0)))}",
+                                f"    PF Change: {_fmt_signed_decimal2(float(d.get('profit_factor_change', 0.0)))}",
+                                f"    Sharpe Change: {_fmt_signed_decimal2(float(d.get('sharpe_change', 0.0)))}",
+                            ]
+                        )
     return "\n".join(lines).rstrip() + "\n"
 
 

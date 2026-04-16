@@ -10,9 +10,14 @@ from dataclasses import dataclass
 # Schema changes must be explicit, additive where possible, and updated across all
 # dependents in the same packet.
 
+from qops.backtest.claude_context import ClaudeCandidateContext
 from qops.overlay.models import OverlayAssessment
 from qops.schemas.risk import TradeEvaluation
 from qops.schemas.structure import TradeStructureCandidate
+
+_SESSION_RELIABILITY_ALLOWED: frozenset[str] = frozenset(
+    {"UNCHANGED", "WEAKENED", "MATERIALLY_CHANGED"}
+)
 
 _ALLOWED_EXIT_REASONS: frozenset[str] = frozenset(
     {
@@ -47,6 +52,7 @@ class ReplayContext:
     candidate_alternatives: list[str] | None = None
 
     overlay: OverlayAssessment | None = None
+    claude_context: ClaudeCandidateContext | None = None
 
 
 def validate_replay_context(ctx: ReplayContext) -> None:
@@ -86,3 +92,23 @@ def validate_replay_context(ctx: ReplayContext) -> None:
 
     if ctx.overlay is not None and not isinstance(ctx.overlay, OverlayAssessment):
         raise TypeError("overlay must be OverlayAssessment or None")
+
+    cc = ctx.claude_context
+    if cc is not None:
+        if not isinstance(cc, ClaudeCandidateContext):
+            raise TypeError("claude_context must be ClaudeCandidateContext or None")
+        if cc.symbol != ctx.symbol:
+            raise ValueError("claude_context.symbol must match ctx.symbol")
+        if not cc.source_type.strip():
+            raise ValueError("claude_context.source_type must be non-empty")
+        if isinstance(cc.file_confidence, bool) or not isinstance(cc.file_confidence, int):
+            raise ValueError("claude_context.file_confidence must be an integer on the 0–10 scale")
+        if not (0 <= cc.file_confidence <= 10):
+            raise ValueError("claude_context.file_confidence must be between 0 and 10 inclusive")
+        if cc.session_reliability_state is not None and (
+            cc.session_reliability_state not in _SESSION_RELIABILITY_ALLOWED
+        ):
+            raise ValueError(
+                "claude_context.session_reliability_state must be one of "
+                f"{sorted(_SESSION_RELIABILITY_ALLOWED)} or None"
+            )

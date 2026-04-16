@@ -39,6 +39,13 @@ def build_trade_log_row(
     overlay_term_structure_state: str | None = None,
     overlay_caution_flag: bool | None = None,
     overlay_downgrade_flag: bool | None = None,
+    claude_source_type: str | None = None,
+    claude_file_regime_label: str | None = None,
+    claude_file_confidence: int | None = None,
+    claude_session_reliability_state: str | None = None,
+    claude_context_note: str | None = None,
+    claude_confidence_adjustment_note: str | None = None,
+    claude_classification_note: str | None = None,
 ) -> BacktestTradeLogRow:
     """Build a validated BacktestTradeLogRow."""
     if not symbol.strip():
@@ -91,6 +98,13 @@ def build_trade_log_row(
         overlay_term_structure_state=overlay_term_structure_state,
         overlay_caution_flag=overlay_caution_flag,
         overlay_downgrade_flag=overlay_downgrade_flag,
+        claude_source_type=claude_source_type,
+        claude_file_regime_label=claude_file_regime_label,
+        claude_file_confidence=claude_file_confidence,
+        claude_session_reliability_state=claude_session_reliability_state,
+        claude_context_note=claude_context_note,
+        claude_confidence_adjustment_note=claude_confidence_adjustment_note,
+        claude_classification_note=claude_classification_note,
     )
 
 
@@ -110,6 +124,23 @@ def build_trade_log_row_from_context(ctx: ReplayContext) -> BacktestTradeLogRow:
         overlay_term = overlay.term_structure_state
         overlay_caution = overlay.caution_flag
         overlay_downgrade = overlay.downgrade_flag
+
+    cc = ctx.claude_context
+    claude_source: str | None = None
+    claude_regime: str | None = None
+    claude_fconf: int | None = None
+    claude_sess: str | None = None
+    claude_ctx_note: str | None = None
+    claude_conf_adj: str | None = None
+    claude_class_note: str | None = None
+    if cc is not None:
+        claude_source = cc.source_type
+        claude_regime = cc.file_regime_label
+        claude_fconf = cc.file_confidence
+        claude_sess = cc.session_reliability_state
+        claude_ctx_note = cc.context_note
+        claude_conf_adj = cc.confidence_adjustment_note
+        claude_class_note = cc.classification_note
 
     return build_trade_log_row(
         symbol=ctx.symbol,
@@ -136,4 +167,11 @@ def build_trade_log_row_from_context(ctx: ReplayContext) -> BacktestTradeLogRow:
         overlay_term_structure_state=overlay_term,
         overlay_caution_flag=overlay_caution,
         overlay_downgrade_flag=overlay_downgrade,
+        claude_source_type=claude_source,
+        claude_file_regime_label=claude_regime,
+        claude_file_confidence=claude_fconf,
+        claude_session_reliability_state=claude_sess,
+        claude_context_note=claude_ctx_note,
+        claude_confidence_adjustment_note=claude_conf_adj,
+        claude_classification_note=claude_class_note,
     )
