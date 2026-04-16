@@ -8,26 +8,7 @@ dependents in the same packet.
 
 from __future__ import annotations
 
-from qops.schemas.backtest import (
-    BacktestSummary,
-    BacktestTradeLogRow,
-    BacktestValidationResult,
-    ValidationStatus,
-    evaluate_backtest_gate,
-)
-from qops.schemas.candidate import ScreenedCandidate
-from qops.schemas.environment import (
-    DirectionalBias,
-    EnvironmentSnapshot,
-    HostageState,
-    IVState,
-    RegimeLabel,
-    SkewState,
-    WallState,
-)
-from qops.schemas.playbook import AllowedPlaybook, PlaybookDecision, StructureBias
-from qops.schemas.risk import TradeEvaluation
-from qops.schemas.structure import TradeStructureCandidate
+from importlib import import_module
 
 __all__ = [
     "AllowedPlaybook",
@@ -49,3 +30,35 @@ __all__ = [
     "WallState",
     "evaluate_backtest_gate",
 ]
+
+_EXPORT_MODULES: dict[str, str] = {
+    "AllowedPlaybook": "qops.schemas.playbook",
+    "BacktestSummary": "qops.schemas.backtest",
+    "BacktestTradeLogRow": "qops.schemas.backtest",
+    "BacktestValidationResult": "qops.schemas.backtest",
+    "DirectionalBias": "qops.schemas.environment",
+    "EnvironmentSnapshot": "qops.schemas.environment",
+    "HostageState": "qops.schemas.environment",
+    "IVState": "qops.schemas.environment",
+    "PlaybookDecision": "qops.schemas.playbook",
+    "RegimeLabel": "qops.schemas.environment",
+    "ScreenedCandidate": "qops.schemas.candidate",
+    "SkewState": "qops.schemas.environment",
+    "StructureBias": "qops.schemas.playbook",
+    "TradeEvaluation": "qops.schemas.risk",
+    "TradeStructureCandidate": "qops.schemas.structure",
+    "ValidationStatus": "qops.schemas.backtest",
+    "WallState": "qops.schemas.environment",
+    "evaluate_backtest_gate": "qops.schemas.backtest",
+}
+
+
+def __getattr__(name: str) -> object:
+    """Lazily resolve schema re-exports to avoid package import cycles."""
+    module_name = _EXPORT_MODULES.get(name)
+    if module_name is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module = import_module(module_name)
+    value = getattr(module, name)
+    globals()[name] = value
+    return value
