@@ -57,3 +57,36 @@ def export_chatgpt_payloads(
     serialized = [_json_safe(asdict(p)) for p in payloads]
     path.write_text(json.dumps(serialized, indent=2), encoding="utf-8")
     return path
+
+
+def export_enriched_chatgpt_payloads(
+    payloads: list[ChatGptCandidatePayload],
+    *,
+    output_dir: str | Path,
+) -> Path:
+    """Write MCP-enriched ChatGPT bridge payloads to JSON under ``output_dir``.
+
+    Single ``trade_date`` → ``chatgpt_payload_enriched_YYYYMMDD.json``.
+    Multiple dates → ``chatgpt_payload_enriched_multi_session.json``.
+
+    Args:
+        payloads: Serialized candidate payloads with ``chain_context`` filled
+            where delayed-chain snapshots were available.
+        output_dir: Directory for output (created if missing).
+
+    Returns:
+        Path to the written JSON file.
+    """
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+
+    dates = sorted({p.trade_date for p in payloads})
+    if len(dates) == 1:
+        filename = f"chatgpt_payload_enriched_{dates[0].replace('-', '')}.json"
+    else:
+        filename = "chatgpt_payload_enriched_multi_session.json"
+
+    path = out / filename
+    serialized = [_json_safe(asdict(p)) for p in payloads]
+    path.write_text(json.dumps(serialized, indent=2), encoding="utf-8")
+    return path

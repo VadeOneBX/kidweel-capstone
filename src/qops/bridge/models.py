@@ -4,6 +4,15 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True, slots=True)
+class McpChainEnrichmentStats:
+    """Counts from a delayed-chain enrichment pass over ChatGPT payloads (research-only)."""
+
+    payload_count: int
+    enriched_count: int
+    skipped_count: int
+
+
+@dataclass(frozen=True, slots=True)
 class CandidateFlags:
     near_call_wall: bool
     near_put_wall: bool
