@@ -13,8 +13,10 @@ from qops.spotgamma.models import SourceType, SpotGammaRecord
 # Canonical field -> acceptable normalized header names (lowercase, underscores).
 _FIELD_ALIASES: dict[str, frozenset[str]] = {
     "symbol": frozenset({"symbol", "ticker", "underlying", "sym", "root"}),
-    "price": frozenset({"price", "spot", "last", "underlying_price", "stock_price"}),
-    "vol_trigger": frozenset({"vol_trigger", "voltrigger", "trigger", "vol_trigger_level"}),
+    "price": frozenset({"price", "spot", "last", "underlying_price", "stock_price", "current_price"}),
+    "vol_trigger": frozenset(
+        {"vol_trigger", "voltrigger", "trigger", "vol_trigger_level", "hedge_wall"}
+    ),
     "call_wall": frozenset({"call_wall", "callwall", "c_wall", "gamma_call_wall"}),
     "put_wall": frozenset({"put_wall", "putwall", "p_wall", "gamma_put_wall"}),
     "gamma_ratio": frozenset({"gamma_ratio", "gammaratio", "gamma", "net_gamma_ratio"}),
@@ -121,15 +123,20 @@ def normalize_rows(
     *,
     source_type: SourceType,
     trade_date: date,
+    default_confidence: float | None = None,
 ) -> list[SpotGammaRecord]:
     """Map a SpotGamma sheet to canonical records.
 
-    Required columns (by header or alias): ``symbol``, ``confidence``.
+    Required columns (by header or alias): ``symbol``.
+
+    ``confidence`` column is required unless ``default_confidence`` is set (portal exports
+    often omit confidence; pass an explicit default from the CLI rather than inventing one).
 
     Args:
         df: Raw sheet data.
         source_type: Which export this sheet came from.
         trade_date: Session date for all rows.
+        default_confidence: If the sheet has no confidence column, use this value for every row.
 
     Returns:
         One :class:`SpotGammaRecord` per data row.
@@ -144,14 +151,18 @@ def normalize_rows(
             "Required column for symbol not found (expected one of: "
             f"{sorted(_FIELD_ALIASES['symbol'])}). Got columns: {list(df.columns)}"
         )
+    use_default_confidence = False
     if "confidence" not in col_map:
-        raise ValueError(
-            "Required column for confidence not found (expected one of: "
-            f"{sorted(_FIELD_ALIASES['confidence'])}). Got columns: {list(df.columns)}"
-        )
+        if default_confidence is None:
+            raise ValueError(
+                "Required column for confidence not found (expected one of: "
+                f"{sorted(_FIELD_ALIASES['confidence'])}), and default_confidence was not set. "
+                f"Got columns: {list(df.columns)}"
+            )
+        use_default_confidence = True
 
     sym_col = col_map["symbol"]
-    conf_col = col_map["confidence"]
+    conf_col = col_map["confidence"] if not use_default_confidence else None
 
     def pick(field: str) -> str | None:
         return col_map.get(field)
@@ -159,7 +170,12 @@ def normalize_rows(
     records: list[SpotGammaRecord] = []
     for idx, row in df.iterrows():
         symbol = require_symbol(row[sym_col], row_index=idx)
-        confidence = require_confidence(row[conf_col], row_index=idx)
+        if use_default_confidence:
+            assert default_confidence is not None
+            confidence = float(default_confidence)
+        else:
+            assert conf_col is not None
+            confidence = require_confidence(row[conf_col], row_index=idx)
 
         price_c = pick("price")
         vol_c = pick("vol_trigger")
@@ -173,6 +189,8 @@ def normalize_rows(
         notes_c = pick("notes")
 
         notes = parse_notes_cell(row[notes_c]) if notes_c else ()
+        if use_default_confidence:
+            notes = notes + ("confidence:default_scalar_from_cli",)
 
         records.append(
             SpotGammaRecord(

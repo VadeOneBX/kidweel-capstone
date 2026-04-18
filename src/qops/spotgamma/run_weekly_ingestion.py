@@ -30,18 +30,29 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--vrp", required=True, type=Path, help="Path to VRP XLSX")
     p.add_argument("--reverse-vrp", required=True, type=Path, help="Path to REVERSE_VRP XLSX")
     p.add_argument("--output-dir", required=True, type=Path, help="Directory for exports")
+    p.add_argument(
+        "--default-confidence",
+        type=float,
+        default=None,
+        help="Use this confidence when the XLSX has no Confidence column (SpotGamma portal exports).",
+    )
     ns = p.parse_args(argv)
 
     td = _parse_trade_date(ns.trade_date)
+    dc = ns.default_confidence
 
     squeeze_df = read_xlsx_table(ns.squeeze)
     vrp_df = read_xlsx_table(ns.vrp)
     rev_df = read_xlsx_table(ns.reverse_vrp)
 
     records: list[SpotGammaRecord] = []
-    records.extend(normalize_rows(squeeze_df, source_type="SQUEEZE", trade_date=td))
-    records.extend(normalize_rows(vrp_df, source_type="VRP", trade_date=td))
-    records.extend(normalize_rows(rev_df, source_type="REVERSE_VRP", trade_date=td))
+    records.extend(
+        normalize_rows(squeeze_df, source_type="SQUEEZE", trade_date=td, default_confidence=dc)
+    )
+    records.extend(normalize_rows(vrp_df, source_type="VRP", trade_date=td, default_confidence=dc))
+    records.extend(
+        normalize_rows(rev_df, source_type="REVERSE_VRP", trade_date=td, default_confidence=dc)
+    )
 
     df = records_to_dataframe(records)
     report = build_aggregate_report(df)
