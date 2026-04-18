@@ -240,3 +240,5 @@ data/*
 
 /.cursor/rules
 /.cursor/rules
+
+model.joblib

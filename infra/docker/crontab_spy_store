@@ -1,0 +1,2 @@
+# Store SPY market context after close on market days (research-only; paths assume /app workspace layout)
+10 17 * * 1-5 env PYTHONPATH=/app/src python -m qops.context.run_spy_store --spy-csv /app/data/spy/latest_spy.csv --output-csv /app/data/spy/spy_market_context_store.csv
