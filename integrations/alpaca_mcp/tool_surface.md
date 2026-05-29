@@ -5,8 +5,8 @@ The **official Alpaca MCP server** supports many actions (account, market data, 
 ## Allowed later (conceptual classes only)
 
 - **Account / context read** — read-only, for verifying paper context before transport (not implemented in C10A).
-- **Paper order request transport** — submit an order **only** from an approved, gated execution request (not implemented in C10A).
-- **Order status normalization** — map broker-shaped status to repo `MCPExecutionResponse` fields (not implemented in C10A).
+- **Paper order request transport** — submit an order **only** from an approved, gated execution request (contract + gates in repo; **no** live MCP wire yet).
+- **Order status normalization** — map broker-shaped status to the five-key raw dict, then to `MCPExecutionResponse` via `normalize_mcp_response` (mock path implemented in C11A; real broker adapter is a future packet).
 
 ## Forbidden now
 

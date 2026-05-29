@@ -1,5 +1,7 @@
 # C13C — Live dynamics (research layer)
 
+**Naming note:** “Live” here means **live-session / current-run research context**, not live trading, live broker submission, or autonomous execution.
+
 This packet adds **research-only** context around SpotGamma candidates: SPY market backdrop, delayed options-chain summaries from locally persisted MCP-fed snapshots, and lightweight ML hooks. It does **not** change execution, risk, or approval authority.
 
 ## Delayed chain

@@ -16,13 +16,21 @@ Alpaca provides **paper trading** as a simulated environment (paper accounts are
 
 MCP tools carry **approved, typed payloads** toward paper execution. They do not screen candidates, alter playbooks, or re-derive regime, confidence, or gamma.
 
-## Out of scope (this packet)
+## Implementation status
+
+| Packet | Role |
+|--------|------|
+| **C10A** | Narrow transport contract (`transport_contract.md`) and typed request/response models in `src/qops/execution/` |
+| **C11A** | **Offline** mock bridge: `mcp_paper_gate` → `mock_mcp_transport` → `normalize_mcp_response` → audit (no network) |
+| **Future** | Real **paper** Alpaca MCP client — explicit packet only; broker-shaped responses need a **pre-normalizer** into the five-key dict before normalization |
+
+MCP remains **transport only**. The repo owns approval; transport carries approved payloads.
+
+## Out of scope (until an explicit packet authorizes otherwise)
 
 - Real broker submission, HTTP clients, SDK calls, or live MCP invocation
 - Live trading mode, position management, fills polling, cancel/replace workflows
 - Credential handling or environment probing
-
-The next packet may add a mock bridge or real MCP client **only** after this contract is fixed.
 
 ## Related docs
 

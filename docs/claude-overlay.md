@@ -1,5 +1,9 @@
 # Claude overlay (C11B-lite)
 
+## Authority
+
+**Claude proposes; the system decides.** Transport executes separately and only for repo-approved payloads.
+
 ## Role
 
 Claude acts as an **overlay governor** on prepared context: it may emit a typed memo (surface, market, term, caution/downgrade flags). It is **not** a decision engine for this repository.

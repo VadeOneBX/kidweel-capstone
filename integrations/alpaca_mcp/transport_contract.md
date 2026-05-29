@@ -2,6 +2,8 @@
 
 Contract for **paper-intended** MCP request/response shapes **without** assuming a live network call. Real Alpaca/MCP behavior must conform to this contract when implemented.
 
+**C11A (mock):** `mock_mcp_transport` already returns dicts that satisfy the raw shape below. **Future real paper MCP:** any broker or MCP tool response must be mapped into this **exact** five-key dict (`accepted`, `status`, `broker_mode`, `external_order_id`, `message`) before calling `normalize_mcp_response`—no extra keys, no omissions.
+
 ## Request shape (`MCPExecutionRequest`)
 
 | Field | Meaning |
