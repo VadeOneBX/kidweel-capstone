@@ -14,12 +14,30 @@ _CANDIDATE_PROFILES: frozenset[str] = frozenset(
     {"squeeze", "vrp", "reverse_vrp", "processed_weekly"}
 )
 
+_RAW_FRESH_PROFILES: frozenset[str] = frozenset(
+    {"squeeze", "vrp", "reverse_vrp", "spy_history"}
+)
+
+STALE_CONTEXT_CSV_MESSAGE = (
+    "Input context appears stale/pre-C1A: missing source_profile/raw profiles. "
+    "Re-run examples/spotgamma_replay_corpus.py --include-raw or pass --rebuild-if-stale."
+)
+
 _REASON_BY_PROFILE: dict[str, str] = {
     "squeeze": "squeeze_profile_candidate",
     "vrp": "vrp_profile_candidate",
     "reverse_vrp": "reverse_vrp_profile_candidate",
     "processed_weekly": "processed_weekly_candidate",
 }
+
+
+@dataclass(frozen=True, slots=True)
+class ContextCsvFreshness:
+    """Freshness assessment for a normalized context CSV (post SG-BT-C1A)."""
+
+    is_fresh: bool
+    has_source_profile_column: bool
+    raw_profiles_found: frozenset[str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,6 +171,36 @@ def load_contexts_from_csv(path: str | Path) -> list[SpotGammaContextRow]:
         raise FileNotFoundError(f"context csv not found: {p.resolve()}")
     df = pd.read_csv(p)
     return [context_row_from_series(row) for _, row in df.iterrows()]
+
+
+def assess_context_csv_freshness(path: str | Path) -> ContextCsvFreshness:
+    """
+    A context CSV is fresh when it has ``source_profile`` and at least one raw profile row.
+
+    Raw profiles: squeeze, vrp, reverse_vrp, spy_history (processed_weekly alone is not enough).
+    """
+    p = Path(path)
+    if not p.is_file():
+        raise FileNotFoundError(f"context csv not found: {p.resolve()}")
+    header = pd.read_csv(p, nrows=0)
+    if "source_profile" not in header.columns:
+        return ContextCsvFreshness(
+            is_fresh=False,
+            has_source_profile_column=False,
+            raw_profiles_found=frozenset(),
+        )
+    profiles = pd.read_csv(p, usecols=["source_profile"])["source_profile"].dropna().astype(str)
+    found = frozenset({s.strip() for s in profiles.unique()} & _RAW_FRESH_PROFILES)
+    return ContextCsvFreshness(
+        is_fresh=bool(found),
+        has_source_profile_column=True,
+        raw_profiles_found=found,
+    )
+
+
+def rebuild_fresh_context(spotgamma_root: str | Path) -> list[SpotGammaContextRow]:
+    """Rebuild context from committed ingest with raw profiles (paper-only, no execution)."""
+    return build_context_corpus(spotgamma_root, include_raw=True)
 
 
 def load_contexts(

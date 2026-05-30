@@ -1,23 +1,69 @@
 #!/usr/bin/env python3
-"""Stage SpotGamma replay candidates from context corpus (SG-BT-C2).
+"""Stage SpotGamma replay candidates from context corpus (SG-BT-C2 / C2A).
 
-Run:
+Canonical flow:
+  PYTHONPATH=src python examples/spotgamma_replay_corpus.py --include-raw
   PYTHONPATH=src python examples/spotgamma_to_replay_candidates.py \\
-    --input data/processed/spotgamma_context_sample.csv --no-write
+    --input data/processed/spotgamma_context_sample.csv
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from qops.backtest.spotgamma_replay_builder import (
+    STALE_CONTEXT_CSV_MESSAGE,
+    assess_context_csv_freshness,
     build_replay_candidates,
     candidates_to_dataframe,
     load_contexts,
+    load_contexts_from_csv,
+    rebuild_fresh_context,
     summarize_replay_candidates,
 )
+
+
+def _resolve_contexts(
+    *,
+    input_path: Path,
+    spotgamma_root: Path,
+    include_raw: bool,
+    allow_stale_input: bool,
+    rebuild_if_stale: bool,
+) -> tuple[list, str]:
+    """Return (contexts, context_source_label)."""
+    if input_path.is_file():
+        freshness = assess_context_csv_freshness(input_path)
+        if not freshness.is_fresh:
+            if rebuild_if_stale:
+                print(
+                    f"Note: {STALE_CONTEXT_CSV_MESSAGE}",
+                    file=sys.stderr,
+                )
+                print(
+                    "Rebuilding fresh context via ingest (--include-raw).",
+                    file=sys.stderr,
+                )
+                return rebuild_fresh_context(spotgamma_root), "ingest_rebuild"
+            if allow_stale_input:
+                print(f"WARNING: {STALE_CONTEXT_CSV_MESSAGE}", file=sys.stderr)
+                print(
+                    "Continuing with --allow-stale-input (diagnostics only; degraded candidates).",
+                    file=sys.stderr,
+                )
+                return load_contexts_from_csv(input_path), "stale_csv"
+            raise SystemExit(STALE_CONTEXT_CSV_MESSAGE)
+        return load_contexts_from_csv(input_path), "fresh_csv"
+
+    if include_raw:
+        return rebuild_fresh_context(spotgamma_root), "ingest_rebuild"
+    raise SystemExit(
+        f"Input not found: {input_path}. "
+        "Re-run spotgamma_replay_corpus.py --include-raw or pass --include-raw here."
+    )
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -26,18 +72,28 @@ def main(argv: list[str] | None = None) -> None:
         "--input",
         type=Path,
         default=Path("data/processed/spotgamma_context_sample.csv"),
-        help="Normalized context CSV (optional if --include-raw rebuild)",
+        help="Normalized context CSV (must be post-C1A fresh unless overridden)",
     )
     p.add_argument(
         "--spotgamma-root",
         type=Path,
         default=Path("data/spotgamma"),
-        help="SpotGamma root for --include-raw rebuild",
+        help="SpotGamma root for ingest rebuild",
     )
     p.add_argument(
         "--include-raw",
         action="store_true",
         help="Rebuild context from ingest when --input is missing",
+    )
+    p.add_argument(
+        "--allow-stale-input",
+        action="store_true",
+        help="Diagnostics only: accept pre-C1A context CSV (degraded candidates)",
+    )
+    p.add_argument(
+        "--rebuild-if-stale",
+        action="store_true",
+        help="If --input is stale, rebuild fresh context via ingest (--include-raw)",
     )
     p.add_argument(
         "--output",
@@ -47,22 +103,19 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--no-write", action="store_true")
     ns = p.parse_args(argv)
 
-    input_csv = ns.input if ns.input.is_file() else None
-    if input_csv is None and not ns.include_raw:
-        raise SystemExit(
-            f"Input not found: {ns.input}. Re-run with --include-raw to rebuild from ingest."
-        )
-
-    contexts = load_contexts(
-        input_csv=input_csv,
+    contexts, source = _resolve_contexts(
+        input_path=ns.input,
         spotgamma_root=ns.spotgamma_root,
         include_raw=ns.include_raw,
+        allow_stale_input=ns.allow_stale_input,
+        rebuild_if_stale=ns.rebuild_if_stale,
     )
     candidates = build_replay_candidates(contexts)
     summary = summarize_replay_candidates(candidates)
 
     print("SpotGamma replay candidates (staging only)")
     print("==========================================")
+    print(f"context_source: {source}")
     print(f"candidate_row_count: {summary['row_count']}")
     print(f"distinct_symbols: {summary['symbol_count']}")
     print(f"date_range: {summary['date_min']} .. {summary['date_max']}")

@@ -38,6 +38,8 @@ PYTHONPATH=src python examples/spotgamma_replay_corpus.py --include-raw
 
 Output default: `data/processed/spotgamma_context_sample.csv` (gitignored).
 
+**Downstream:** After `--include-raw`, run `examples/spotgamma_to_replay_candidates.py` on that CSV. Stale pre-C1A samples are rejected unless `--rebuild-if-stale` or `--allow-stale-input` (see `docs/spotgamma-to-replay.md`).
+
 ## Next packet
 
 Join context rows to Alpaca chain/bar data for full replay — out of scope here.

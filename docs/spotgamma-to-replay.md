@@ -14,8 +14,33 @@ This is **not**:
 
 ## Inputs
 
-- `data/processed/spotgamma_context_sample.csv` (from `examples/spotgamma_replay_corpus.py`), **or**
-- In-memory rebuild via committed ingest (`build_context_corpus(..., include_raw=True)`) when CSV is missing and `--include-raw` is set
+Regenerate context after SG-BT-C1A so `source_profile` and raw scanner rows are present. **Stale pre-C1A CSVs** (missing `source_profile` or raw profiles) are **rejected** by the candidate CLI unless you pass `--allow-stale-input` (diagnostics) or `--rebuild-if-stale`.
+
+## Canonical commands
+
+Build fresh context (required for full candidate staging):
+
+```bash
+PYTHONPATH=src python examples/spotgamma_replay_corpus.py --include-raw
+```
+
+Stage replay candidates from that file:
+
+```bash
+PYTHONPATH=src python examples/spotgamma_to_replay_candidates.py \
+  --input data/processed/spotgamma_context_sample.csv
+```
+
+If you still have a stale sample on disk:
+
+```bash
+PYTHONPATH=src python examples/spotgamma_to_replay_candidates.py \
+  --input data/processed/spotgamma_context_sample.csv \
+  --rebuild-if-stale --no-write
+```
+
+- **`--allow-stale-input`** — diagnostics only (e.g. 118 processed_weekly rows, no SPY context).
+- **Full candidate staging** requires raw profile context (squeeze / vrp / reverse_vrp / spy_history).
 
 ## Profile handling
 
@@ -31,20 +56,6 @@ This is **not**:
 
 - CLI prints counts, date range, profile breakdown, SPY attachment stats, and top missing fields.
 - Optional CSV: `data/processed/spotgamma_replay_candidates.csv` (gitignored under `data/`)
-
-## Command
-
-```bash
-PYTHONPATH=src python examples/spotgamma_to_replay_candidates.py \
-  --input data/processed/spotgamma_context_sample.csv \
-  --no-write
-```
-
-Rebuild context when sample CSV is absent:
-
-```bash
-PYTHONPATH=src python examples/spotgamma_to_replay_candidates.py --include-raw --no-write
-```
 
 ## Next packet
 
