@@ -1,8 +1,19 @@
-# Kidweel Capstone — Deterministic Paper-Only Options Decision System
+# KIDWEEL
 
-This repo is a **deterministic, paper-only** options decision system. It turns market context (including SpotGamma-derived inputs) into structured decisions using fixed playbook gating, RR / PMP validation, typed contracts, iterative backtest evidence, and audit-ready outputs.
+## What breaks first?
 
-**Core anchors:** Claude proposes (within bounds). The system decides. Transport executes. AI can generate actions; constraint systems determine which actions are allowed.
+Built from trading.  
+Applied everywhere.
+
+A deterministic, paper-only decision system for testing how automated systems remain consistent as authority scales.
+
+- Context becomes structured decisions
+- Claude may propose; it cannot approve
+- Validation gates decide what continues
+- MCP transports approved paper payloads only
+- Every outcome should be traceable
+
+Automation creates leverage. Constraints determine whether that leverage survives scale.
 
 ---
 
@@ -51,9 +62,21 @@ SpotGamma and related context feed screening and playbook selection. Structure a
 
 ---
 
+## Structure and advisory policy
+
+Canonical structure and ML/subagent rules live in [docs/system-identity.md](./docs/system-identity.md).
+
+**Structure:** The spread builder may emit `BULL_CALL_SPREAD`, `BEAR_PUT_SPREAD`, `BULL_PUT_CREDIT_SPREAD`, `BEAR_CALL_CREDIT_SPREAD`, or `SKIP`. No parked structures. Executable paths are multi-leg, risk-defined spreads only (debit and credit when explicitly validated). Single-leg long calls or puts are for context, not canonical execution.
+
+**ML / subagents:** Required advisory layers—they score, flag, compare expressions, downgrade confidence, and may recommend `SKIP`. They do not approve, override gates, mutate thresholds, or call transport. The deterministic engine remains the decision owner.
+
+Paper-only execution remains mandatory.
+
+---
+
 ## Claude boundary
 
-Claude may interpret context and propose structures **only** where a packet explicitly allows bounded suggestion; overlay and backtest paths treat Claude as **non-authoritative** commentary and research filters.
+Claude may interpret context (skew, liquidity, deteriorating reward/risk, debit vs credit posture) and propose **bounded** spread alternatives only within the canonical structure set above.
 
 Claude **cannot** approve trades, size positions, execute orders, bypass validation, or call broker transport.
 
@@ -102,11 +125,11 @@ The **architecture is transferable**: the same pattern applies wherever agents c
 
 ## Subagent / swarm pattern
 
-Multiple agents may assist development or analysis, but **authority remains bounded**.
+Multiple agents and ML review assist development and candidate analysis; **authority remains bounded**. ML/subagent review is **required** as an advisory layer, not optional.
 
-**Subagents may propose:** candidate ideas, structure alternatives, caution notes, environment summaries, test priorities.
+**Subagents may propose:** candidate ideas, bounded structure alternatives (canonical spreads only), caution notes, environment summaries, test priorities, confidence downgrades, `SKIP` recommendations.
 
-**Subagents may not:** approve trades, execute orders, bypass gates, mutate playbooks, change thresholds without review, or call broker transport.
+**Subagents may not:** approve trades, execute orders, bypass gates, mutate playbooks, change thresholds, create execution payloads, or call broker transport.
 
 **Swarm-safe routing:**
 
@@ -136,6 +159,7 @@ Multiple agents may assist development or analysis, but **authority remains boun
 
 | Doc | Topic |
 |-----|--------|
+| [docs/system-identity.md](./docs/system-identity.md) | Identity, structure policy, ML/subagent policy |
 | [docs/claude-overlay.md](./docs/claude-overlay.md) | Claude overlay (memo-only) |
 | [docs/claude-backtest-wiring.md](./docs/claude-backtest-wiring.md) | Claude backtest (research only) |
 | [integrations/alpaca_mcp/README.md](./integrations/alpaca_mcp/README.md) | Alpaca MCP scaffold & posture |
