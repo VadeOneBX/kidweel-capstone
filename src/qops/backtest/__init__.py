@@ -25,6 +25,14 @@ from qops.backtest.claude_comparison import (
     run_claude_context_comparison,
 )
 from qops.backtest.runner import format_evidence_block, format_metric_value, run_iterative_backtest
+from qops.backtest.alpaca_replay_inputs import (
+    AlpacaReplayInputPlanRow,
+    build_availability_plan,
+    load_replay_candidates,
+    load_replay_candidates_from_csv,
+    plan_to_dataframe,
+    summarize_availability_plan,
+)
 from qops.backtest.spotgamma_replay_builder import (
     ReplayCandidateRow,
     build_replay_candidates,
@@ -42,10 +50,12 @@ from qops.backtest.summary import (
 from qops.backtest.trade_log import build_trade_log_row, build_trade_log_row_from_context
 
 __all__ = [
+    "AlpacaReplayInputPlanRow",
     "ClaudeCandidateContext",
     "ReplayContext",
     "ReplayCandidateRow",
     "average_trade",
+    "build_availability_plan",
     "build_backtest_summary",
     "build_claude_context_metrics",
     "build_overlay_metrics",
@@ -58,9 +68,12 @@ __all__ = [
     "format_metric_value",
     "filter_contexts_by_claude_context",
     "filter_contexts_by_overlay",
+    "load_replay_candidates",
+    "load_replay_candidates_from_csv",
     "load_contexts_from_csv",
     "loss_rate",
     "max_drawdown_from_pnls",
+    "plan_to_dataframe",
     "profit_factor",
     "run_iterative_backtest",
     "run_claude_context_comparison",
@@ -69,6 +82,7 @@ __all__ = [
     "sharpe_from_pnls",
     "stop_hit_rate",
     "stop_loss_rate",
+    "summarize_availability_plan",
     "summarize_replay_candidates",
     "total_pnl",
     "validate_backtest_summary",
