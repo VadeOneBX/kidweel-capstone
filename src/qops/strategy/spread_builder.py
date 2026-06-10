@@ -6,6 +6,7 @@ from qops.strategy.constants import DEFAULT_BEAR_PUT_WIDTH, DEFAULT_BULL_CALL_WI
 from qops.strategy.expiry_selector import select_expiry
 from qops.strategy.payoff import debit_spread_max_loss, debit_spread_max_profit
 from qops.strategy.rr import reward_risk_ratio
+from qops.strategy.spread_math import evaluate_spread_math, spread_math_allows_advance
 
 # Schemas are canonical handoff contracts.
 # Do not rename, repurpose, or silently widen schema fields once imported downstream.
@@ -36,6 +37,9 @@ def _structure_type_for_playbook(playbook: AllowedPlaybook) -> str:
 def build_structure_candidate(
     candidate: ScreenedCandidate,
     debit_or_credit: float,
+    *,
+    reference_strike: float,
+    probability_of_profit: float | None = None,
 ) -> TradeStructureCandidate:
     """
     Build a deterministic trade structure candidate from an executable screened candidate.
@@ -58,7 +62,7 @@ def build_structure_candidate(
     max_loss = debit_spread_max_loss(debit=debit_or_credit)
     rr_actual = reward_risk_ratio(max_profit=max_profit, max_loss=max_loss)
 
-    return TradeStructureCandidate(
+    structure = TradeStructureCandidate(
         symbol=candidate.symbol,
         structure_type=_structure_type_for_playbook(playbook),
         expiry=expiry,
@@ -77,3 +81,15 @@ def build_structure_candidate(
         allowed_playbook=playbook,
         structure_reason="deterministic_placeholder_width_scaffold_no_chain_selection",
     )
+
+    math_eval = evaluate_spread_math(
+        structure,
+        reference_strike=reference_strike,
+        probability_of_profit=probability_of_profit,
+    )
+    allowed, reason = spread_math_allows_advance(math_eval)
+    if not allowed:
+        detail = ",".join(math_eval.failure_reasons) or reason
+        raise ValueError(f"spread_math_gate_denied:{detail}")
+
+    return structure

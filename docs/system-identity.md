@@ -30,6 +30,8 @@ Credit spreads are allowed only when max loss, collateral requirement, width, pr
 
 Debit spreads are allowed only when debit, max loss, max profit, RR, and PMP/EV thresholds are explicitly validated.
 
+**Spread math gate (Option Alpha economics):** Before ML/subagent review, risk approval, MCP, or paper transport, every spread must pass deterministic evaluation in `qops.strategy.spread_math` (reward/risk, break-even, capital at risk, and PMP/EV when probability inputs exist). When PMP is available, minimum reward/risk comes from the canonical `PMP_TO_MIN_RR` table in `qops.risk.pmp_policy` (floor raw PMP to the nearest 5% bucket within 0.25–0.90; never round up; no interpolation). Failed math cannot be upgraded by Claude, ML, or subagents.
+
 **Underlying price guard:**
 
 - Prefer candidates with underlying price under $100 for early paper-trading expansion.
