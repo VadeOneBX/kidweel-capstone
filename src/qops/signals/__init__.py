@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from qops.signals.alignment import dte_aligns_with_signal, signal_alignment_passes
+from importlib import import_module
+
 from qops.signals.classifier import (
     GammaRegimeState,
     PremiumPosture,
@@ -48,3 +49,18 @@ __all__ = [
     "signal_alignment_passes",
     "signal_horizon_days",
 ]
+
+_LAZY_EXPORTS: dict[str, str] = {
+    "dte_aligns_with_signal": "qops.signals.alignment",
+    "signal_alignment_passes": "qops.signals.alignment",
+}
+
+
+def __getattr__(name: str) -> object:
+    module_name = _LAZY_EXPORTS.get(name)
+    if module_name is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module = import_module(module_name)
+    value = getattr(module, name)
+    globals()[name] = value
+    return value
