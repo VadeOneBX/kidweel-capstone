@@ -12,6 +12,41 @@ For each narrowed SG-BT-C4A blueprint row:
 2. Fall back to **Black–Scholes / BSM** greeks only when `--allow-bs-fallback` is set and IV (or an explicit `--fallback-volatility-proxy`) is available.
 3. Record `greeks_source`, `greeks_status`, and `greeks_confidence` on every contract row.
 
+## Modes (ALPACA-GREEKS-C1B)
+
+### Historical replay (default)
+
+Uses C4A **blueprint replay** rows (`trade_date`, `expiration_window`, strike bounds from SpotGamma replay context). Live Alpaca option-chain endpoints return **current** listings only; replay windows in the past (e.g. April 2026) typically yield **zero contracts** even when credentials are valid. Use this mode for blueprint/Databento planning, not for populating today’s chain.
+
+```bash
+PYTHONPATH=src python examples/alpaca_greeks_candidate_stage.py \
+  --rebuild-if-missing \
+  --no-write \
+  --limit 10
+```
+
+### Paper-live (`--paper-live`)
+
+Uses **today** as `trade_date`, builds the expiration window from `--dte-min` / `--dte-max` (default **0–14**), and fetches **current** read-only option chain snapshots. Preferred path for **paper-trading candidate generation**. Does not submit orders, use MCP, or call paper/live execution endpoints.
+
+Symbols from (in order):
+
+1. `--symbols` (comma-separated), or
+2. SpotGamma replay candidates when context/corpus is available and fresh, or
+3. exit `NO_SYMBOL_SOURCE`
+
+```bash
+PYTHONPATH=src python examples/alpaca_greeks_candidate_stage.py \
+  --paper-live \
+  --symbols AAPL,AMD \
+  --fetch \
+  --no-write \
+  --allow-bs-fallback \
+  --debug-requests
+```
+
+**0DTE is not required**; DTE window remains configurable. **Databento** stays the precision reserve for historical replay, not the default here. **No execution** occurs in this layer.
+
 ## Upstream
 
 - Input: `data/processed/alpaca_blueprint_replay_plan.csv`, or rebuild via C4A (`--rebuild-if-missing`).

@@ -2,7 +2,11 @@
 
 ## Purpose
 
-Adapt the [Alpaca 0DTE options backtesting example](https://github.com/alpacahq/alpaca-py/tree/e4268eb61c564b0b665fa32f69024a9970e6f12b/examples/options/options-zero-dte-backtesting) **shape** into Kidweel’s SpotGamma replay pipeline:
+Adapt the [Alpaca 0DTE options backtesting example](https://github.com/alpacahq/alpaca-py/tree/e4268eb61c564b0b665fa32f69024a9970e6f12b/examples/options/options-zero-dte-backtesting) as a **moving-pieces blueprint** (collect by expiration, narrow strikes, fetch only what is needed)—not as a required trading horizon.
+
+**Kidweel candidates are not locked to 0DTE.** The initial expiration window is **configurable** (CLI defaults are illustrative; **0–14 DTE** or another band is allowed). Shorter DTE receives **stricter** liquidity, Greek, and timing scrutiny downstream; longer DTE is not excluded by this blueprint.
+
+The same blueprint **shape** is applied in Kidweel’s SpotGamma replay pipeline:
 
 - collect option symbols by expiration (planned, not fetched here)
 - limit candidates by underlying, trade date, and DTE
@@ -17,6 +21,8 @@ SpotGamma narrows the universe **before** any option data request. Fewest rows p
 **SG-BT-C4A scope:** multi-leg structures remain canonical policy (`BULL_CALL_SPREAD`, `BEAR_PUT_SPREAD`, credit spreads when implemented). This packet does not pick legs; if a future fetch packet conflicts with four-structure breadth, the evidence track may start with **BULL_CALL_SPREAD** only without changing canonical policy. No fallback was required for C4A.
 
 This packet does **not** generate trades, execution payloads, or PnL. It does **not** call MCP or paper transport.
+
+**Greeks staging:** Historical replay blueprint rows (past `trade_date` / expiration windows) are for planning and Databento follow-up. To populate **current** option chains for paper candidate generation, use `examples/alpaca_greeks_candidate_stage.py --paper-live` (see `docs/alpaca-greeks-layer.md`).
 
 ## Upstream
 
@@ -56,7 +62,7 @@ Output (optional, gitignored under `data/`):
 
 ### Databento entry point (later)
 
-After Alpaca read-only chain collection returns OCC symbols inside `expiration_window` and strike bounds, a future packet may request **Databento Greeks and bar slices for those contracts only**. C4A records this as `databento_next_step` on each plan row.
+**Databento is a precision fallback for historical replay, not the default data path.** After Alpaca read-only chain collection returns OCC symbols inside `expiration_window` and strike bounds, a future packet may request **Databento Greeks and bar slices for those contracts only** when higher fidelity is required. C4A records this as `databento_next_step` on each plan row.
 
 ## Boundaries
 

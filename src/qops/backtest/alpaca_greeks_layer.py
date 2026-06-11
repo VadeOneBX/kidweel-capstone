@@ -14,9 +14,13 @@ import pandas as pd
 from qops.backtest.alpaca_blueprint_adapter import (
     AlpacaBlueprintReplayPlanRow,
     build_blueprint_request_plan,
+    expiration_window_label,
     filter_ready_for_fetch,
     load_availability_plan,
+    strike_bounds,
 )
+from qops.backtest.alpaca_replay_inputs import ReplayCandidateRow, load_replay_candidates
+from qops.backtest.spotgamma_replay_builder import assess_context_csv_freshness
 from qops.bridge.chain_snapshot_export import parse_occ_us_option_contract
 
 PROVENANCE_TAG = "alpaca_greeks_c1_staging"
@@ -53,6 +57,14 @@ class AlpacaGreeksCandidateRow:
     blueprint_provenance: str
     source_profile: str
     has_spy_context: bool
+    mode: str = "historical_replay"
+    source: str = "alpaca_greeks_c1_staging"
+
+
+PAPER_LIVE_MODE = "paper_live"
+HISTORICAL_REPLAY_MODE = "historical_replay"
+PAPER_LIVE_ROW_SOURCE = "alpaca_paper_live_chain"
+PAPER_LIVE_PROVENANCE = "alpaca_greeks_c1b_paper_live"
 
 
 FetchFailureClass = Literal[
@@ -83,6 +95,26 @@ class GreeksFetchDiagnostics:
     empty_response_reasons: tuple[str, ...]
     error_summaries: tuple[str, ...]
     failure_class: FetchFailureClass | None
+    staging_mode: str = HISTORICAL_REPLAY_MODE
+    symbols_requested: tuple[str, ...] = ()
+    symbol_source: str = ""
+    contracts_removed_by_dte_filter: int = 0
+    contracts_removed_by_strike_filter: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class PaperLiveSymbolSpec:
+    symbol: str
+    current_price: float | None
+    source_profile: str
+    has_spy_context: bool
+    provenance: str
+
+
+@dataclass(frozen=True, slots=True)
+class _ChainFilterStats:
+    removed_by_dte: int
+    removed_by_strike: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +125,8 @@ class _FetchAttemptResult:
     filtered_snapshots: dict[str, Any]
     empty_reason: str | None
     error_summary: str | None
+    removed_by_dte: int = 0
+    removed_by_strike: int = 0
 
 
 def sanitize_blueprint_descriptor(plan: AlpacaBlueprintReplayPlanRow) -> dict[str, object]:
@@ -172,12 +206,17 @@ def resolve_fetch_failure_class(diag: GreeksFetchDiagnostics) -> FetchFailureCla
 
 def fetch_diagnostics_summary(diag: GreeksFetchDiagnostics) -> dict[str, object]:
     return {
+        "mode": diag.staging_mode,
+        "symbols_requested": list(diag.symbols_requested),
+        "symbol_source": diag.symbol_source,
         "requests_attempted": diag.requests_attempted,
         "requests_empty": diag.requests_empty,
         "requests_error": diag.requests_error,
         "requests_invalid": diag.requests_invalid,
         "contracts_before_filter": diag.contracts_before_filter,
         "contracts_removed_by_filter": diag.contracts_removed_by_filter,
+        "contracts_removed_by_dte_filter": diag.contracts_removed_by_dte_filter,
+        "contracts_removed_by_strike_filter": diag.contracts_removed_by_strike_filter,
         "contracts_after_filter": diag.contracts_after_filter,
         "contracts_staged": diag.contracts_staged,
         "failure_class": diag.failure_class,
@@ -258,6 +297,265 @@ def load_blueprint_request_plans(
         limit=limit,
     )
     return plans, "rebuilt_c4a_blueprint_plan"
+
+
+def _today_trade_date() -> str:
+    return date.today().isoformat()
+
+
+def _latest_candidate_price_by_symbol(
+    candidates: list[ReplayCandidateRow],
+) -> dict[str, ReplayCandidateRow]:
+    best: dict[str, ReplayCandidateRow] = {}
+    for row in candidates:
+        sym = row.symbol.strip().upper()
+        if not sym:
+            continue
+        prev = best.get(sym)
+        if prev is None or row.trade_date > prev.trade_date:
+            best[sym] = row
+    return best
+
+
+def _optional_replay_candidates(
+    candidates_csv: Path,
+    spotgamma_root: Path,
+) -> list[ReplayCandidateRow]:
+    if candidates_csv.is_file():
+        rows, _ = load_replay_candidates(
+            input_csv=candidates_csv,
+            spotgamma_root=spotgamma_root,
+            rebuild_if_missing=False,
+        )
+        return rows
+    if spotgamma_root.is_dir():
+        rows, _ = load_replay_candidates(
+            input_csv=candidates_csv,
+            spotgamma_root=spotgamma_root,
+            rebuild_if_missing=True,
+        )
+        return rows
+    return []
+
+
+def resolve_paper_live_symbol_specs(
+    *,
+    symbols_csv: str | None,
+    candidates_csv: Path,
+    context_csv: Path,
+    spotgamma_root: Path,
+    max_symbols: int,
+    limit: int | None,
+) -> tuple[list[PaperLiveSymbolSpec], str]:
+    cap = max_symbols
+    if limit is not None and limit > 0:
+        cap = min(cap, limit)
+
+    if symbols_csv:
+        symbols = [s.strip().upper() for s in symbols_csv.split(",") if s.strip()]
+        symbols = symbols[:cap]
+        if not symbols:
+            raise SystemExit("NO_SYMBOL_SOURCE: --symbols was empty after parsing")
+        by_sym = _latest_candidate_price_by_symbol(
+            _optional_replay_candidates(candidates_csv, spotgamma_root)
+        )
+        specs: list[PaperLiveSymbolSpec] = []
+        for sym in symbols:
+            cand = by_sym.get(sym)
+            price = cand.current_price if cand is not None else None
+            specs.append(
+                PaperLiveSymbolSpec(
+                    symbol=sym,
+                    current_price=price if price is not None and price > 0 else None,
+                    source_profile=cand.source_profile if cand else "explicit_symbol",
+                    has_spy_context=cand.has_spy_context if cand else False,
+                    provenance=PAPER_LIVE_PROVENANCE,
+                )
+            )
+        return specs, "explicit_symbols"
+
+    if not context_csv.is_file() and not spotgamma_root.is_dir():
+        raise SystemExit("NO_SYMBOL_SOURCE: provide --symbols or SpotGamma corpus (context/candidates)")
+
+    freshness = assess_context_csv_freshness(context_csv) if context_csv.is_file() else None
+    if context_csv.is_file() and freshness is not None and not freshness.is_fresh:
+        raise SystemExit("NO_SYMBOL_SOURCE: SpotGamma context CSV is stale; rebuild corpus or pass --symbols")
+
+    candidates, cand_source = load_replay_candidates(
+        input_csv=candidates_csv,
+        spotgamma_root=spotgamma_root,
+        rebuild_if_missing=True,
+    )
+    by_sym = _latest_candidate_price_by_symbol(candidates)
+    ordered = sorted(by_sym.keys())[:cap]
+    if not ordered:
+        raise SystemExit("NO_SYMBOL_SOURCE: no symbols in SpotGamma replay candidates")
+    specs = []
+    for sym in ordered:
+        cand = by_sym[sym]
+        price = cand.current_price
+        specs.append(
+            PaperLiveSymbolSpec(
+                symbol=sym,
+                current_price=price if price is not None and price > 0 else None,
+                source_profile=cand.source_profile,
+                has_spy_context=cand.has_spy_context,
+                provenance=f"{PAPER_LIVE_PROVENANCE}|{cand_source}",
+            )
+        )
+    return specs, f"spotgamma_corpus|{cand_source}"
+
+
+def try_fetch_stock_mid_price(_option_client: Any, symbol: str) -> float | None:
+    try:
+        from alpaca.data.historical import StockHistoricalDataClient
+        from alpaca.data.requests import StockLatestQuoteRequest
+    except ImportError:
+        return None
+    keys = resolve_market_data_api_keys()
+    if keys is None:
+        return None
+    api_key, secret_key = keys
+    try:
+        stock_client = StockHistoricalDataClient(api_key=api_key, secret_key=secret_key, raw_data=True)
+        raw = stock_client.get_stock_latest_quote(StockLatestQuoteRequest(symbol_or_symbols=symbol.strip().upper()))
+    except Exception:
+        return None
+    quote = raw.get(symbol.strip().upper()) if isinstance(raw, dict) else raw
+    if quote is None:
+        return None
+    if isinstance(quote, dict):
+        bid = _float_or_none(quote.get("bp") or quote.get("bid_price"))
+        ask = _float_or_none(quote.get("ap") or quote.get("ask_price"))
+    else:
+        bid = _float_or_none(getattr(quote, "bid_price", None))
+        ask = _float_or_none(getattr(quote, "ask_price", None))
+    if bid is not None and ask is not None and ask >= bid:
+        return (bid + ask) / 2.0
+    return bid or ask
+
+
+def build_paper_live_blueprint_plans(
+    specs: list[PaperLiveSymbolSpec],
+    *,
+    dte_min: int,
+    dte_max: int,
+    strike_buffer_pct: float,
+    fetch_prices: bool,
+    option_client: Any | None,
+) -> list[AlpacaBlueprintReplayPlanRow]:
+    trade_date = _today_trade_date()
+    exp_window = expiration_window_label(trade_date, dte_min, dte_max)
+    plans: list[AlpacaBlueprintReplayPlanRow] = []
+    for spec in specs:
+        price = spec.current_price
+        if (price is None or price <= 0) and fetch_prices and option_client is not None:
+            fetched = try_fetch_stock_mid_price(option_client, spec.symbol)
+            if fetched is not None and fetched > 0:
+                price = fetched
+        if price is None or price <= 0:
+            continue
+        lower, upper = strike_bounds(price, strike_buffer_pct)
+        plans.append(
+            AlpacaBlueprintReplayPlanRow(
+                symbol=spec.symbol,
+                trade_date=trade_date,
+                current_price=price,
+                dte_min=dte_min,
+                dte_max=dte_max,
+                expiration_window=exp_window,
+                strike_lower_bound=lower,
+                strike_upper_bound=upper,
+                request_reason="paper_live_current_chain",
+                source_profile=spec.source_profile,
+                has_spy_context=spec.has_spy_context,
+                provenance=spec.provenance,
+                databento_next_step="paper_live_no_databento",
+            )
+        )
+    return plans
+
+
+def _cap_contracts_per_symbol(
+    rows: list[AlpacaGreeksCandidateRow],
+    max_per_symbol: int | None,
+) -> list[AlpacaGreeksCandidateRow]:
+    if max_per_symbol is None or max_per_symbol <= 0:
+        return rows
+    by_sym: dict[str, list[AlpacaGreeksCandidateRow]] = {}
+    for row in rows:
+        sym = row.underlying_symbol.strip().upper()
+        by_sym.setdefault(sym, []).append(row)
+    out: list[AlpacaGreeksCandidateRow] = []
+    for sym in sorted(by_sym.keys()):
+        chunk = sorted(by_sym[sym], key=lambda r: r.option_symbol)[:max_per_symbol]
+        out.extend(chunk)
+    return out
+
+
+def stage_greeks_paper_live(
+    specs: list[PaperLiveSymbolSpec],
+    *,
+    symbol_source: str,
+    fetch: bool,
+    client: Any | None,
+    dte_min: int,
+    dte_max: int,
+    strike_buffer_pct: float,
+    risk_free_rate: float,
+    allow_bs_fallback: bool,
+    fallback_volatility_proxy: float | None,
+    min_time_to_expiry_days: float | None,
+    max_contracts_per_symbol: int | None,
+) -> tuple[list[AlpacaGreeksCandidateRow], bool, GreeksFetchDiagnostics | None, list[AlpacaBlueprintReplayPlanRow]]:
+    symbols = tuple(s.symbol for s in specs)
+    plans = build_paper_live_blueprint_plans(
+        specs,
+        dte_min=dte_min,
+        dte_max=dte_max,
+        strike_buffer_pct=strike_buffer_pct,
+        fetch_prices=fetch,
+        option_client=client,
+    )
+    if not plans and fetch:
+        diag = GreeksFetchDiagnostics(
+            fetch_attempted=False,
+            blueprint_rows=0,
+            requests_attempted=0,
+            requests_empty=0,
+            requests_error=0,
+            requests_invalid=len(specs),
+            contracts_before_filter=0,
+            contracts_removed_by_filter=0,
+            contracts_after_filter=0,
+            contracts_staged=0,
+            request_descriptors=tuple(),
+            empty_response_reasons=tuple(),
+            error_summaries=("REQUEST_INVALID:missing_current_price",),
+            failure_class="REQUEST_INVALID",
+            staging_mode=PAPER_LIVE_MODE,
+            symbols_requested=symbols,
+            symbol_source=symbol_source,
+        )
+        return [], False, diag, plans
+    rows, attempted, diag = stage_greeks_for_plans(
+        plans,
+        fetch=fetch and client is not None,
+        client=client,
+        risk_free_rate=risk_free_rate,
+        allow_bs_fallback=allow_bs_fallback,
+        fallback_volatility_proxy=fallback_volatility_proxy,
+        min_time_to_expiry_days=min_time_to_expiry_days,
+        row_mode=PAPER_LIVE_MODE,
+        row_source=PAPER_LIVE_ROW_SOURCE,
+        diagnostics_mode=PAPER_LIVE_MODE,
+        symbols_requested=symbols,
+        symbol_source=symbol_source,
+    )
+    rows = _cap_contracts_per_symbol(rows, max_contracts_per_symbol)
+    if diag is not None and max_contracts_per_symbol:
+        diag = replace(diag, contracts_staged=len(rows))
+    return rows, attempted, diag, plans
 
 
 def _parse_expiration_window(expiration_window: str) -> tuple[date, date]:
@@ -386,8 +684,18 @@ def _filter_chain_snapshots(
     snapshots: dict[str, Any],
     plan: AlpacaBlueprintReplayPlanRow,
 ) -> dict[str, Any]:
+    filtered, _ = _filter_chain_snapshots_with_stats(snapshots, plan)
+    return filtered
+
+
+def _filter_chain_snapshots_with_stats(
+    snapshots: dict[str, Any],
+    plan: AlpacaBlueprintReplayPlanRow,
+) -> tuple[dict[str, Any], _ChainFilterStats]:
     exp_lo, exp_hi = _parse_expiration_window(plan.expiration_window)
     filtered: dict[str, Any] = {}
+    removed_dte = 0
+    removed_strike = 0
     for contract_symbol, snap in snapshots.items():
         if not isinstance(snap, dict):
             continue
@@ -399,11 +707,13 @@ def _filter_chain_snapshots(
             continue
         exp_d = date.fromisoformat(expiration)
         if exp_d < exp_lo or exp_d > exp_hi:
+            removed_dte += 1
             continue
         if strike < plan.strike_lower_bound or strike > plan.strike_upper_bound:
+            removed_strike += 1
             continue
         filtered[str(contract_symbol)] = snap
-    return filtered
+    return filtered, _ChainFilterStats(removed_by_dte=removed_dte, removed_by_strike=removed_strike)
 
 
 def _effective_time_years(
@@ -435,6 +745,8 @@ def enrich_contract_row(
     allow_bs_fallback: bool,
     fallback_volatility_proxy: float | None,
     min_time_to_expiry_days: float | None,
+    row_mode: str = HISTORICAL_REPLAY_MODE,
+    row_source: str = "alpaca_greeks_c1_staging",
 ) -> AlpacaGreeksCandidateRow:
     bid, ask, mid = (None, None, None)
     latest_trade = None
@@ -478,9 +790,9 @@ def enrich_contract_row(
             blueprint_provenance=plan.provenance,
             source_profile=plan.source_profile,
             has_spy_context=plan.has_spy_context,
+            mode=row_mode,
+            source=row_source,
         )
-
-    if _alpaca_greeks_complete(greeks):
         source = "alpaca_snapshot"
         status = "AVAILABLE"
         confidence = "high"
@@ -548,6 +860,8 @@ def enrich_contract_row(
         blueprint_provenance=plan.provenance,
         source_profile=plan.source_profile,
         has_spy_context=plan.has_spy_context,
+        mode=row_mode,
+        source=row_source,
     )
 
 
@@ -609,7 +923,7 @@ def _fetch_option_chain_attempt(client: Any, plan: AlpacaBlueprintReplayPlanRow)
             error_summary=f"API_SHAPE_MISMATCH:expected_dict_got_{type(raw).__name__}",
         )
     before = len(raw)
-    filtered = _filter_chain_snapshots(raw, plan)
+    filtered, stats = _filter_chain_snapshots_with_stats(raw, plan)
     after = len(filtered)
     if before == 0:
         return _FetchAttemptResult(
@@ -628,6 +942,8 @@ def _fetch_option_chain_attempt(client: Any, plan: AlpacaBlueprintReplayPlanRow)
             filtered_snapshots={},
             empty_reason="filter_removed_all_contracts",
             error_summary=None,
+            removed_by_dte=stats.removed_by_dte,
+            removed_by_strike=stats.removed_by_strike,
         )
     return _FetchAttemptResult(
         outcome="ok",
@@ -636,6 +952,8 @@ def _fetch_option_chain_attempt(client: Any, plan: AlpacaBlueprintReplayPlanRow)
         filtered_snapshots=filtered,
         empty_reason=None,
         error_summary=None,
+        removed_by_dte=stats.removed_by_dte,
+        removed_by_strike=stats.removed_by_strike,
     )
 
 
@@ -648,6 +966,11 @@ def stage_greeks_for_plans(
     allow_bs_fallback: bool,
     fallback_volatility_proxy: float | None,
     min_time_to_expiry_days: float | None,
+    row_mode: str = HISTORICAL_REPLAY_MODE,
+    row_source: str = "alpaca_greeks_c1_staging",
+    diagnostics_mode: str = HISTORICAL_REPLAY_MODE,
+    symbols_requested: tuple[str, ...] = (),
+    symbol_source: str = "",
 ) -> tuple[list[AlpacaGreeksCandidateRow], bool, GreeksFetchDiagnostics | None]:
     rows: list[AlpacaGreeksCandidateRow] = []
     if not fetch:
@@ -664,6 +987,8 @@ def stage_greeks_for_plans(
     requests_invalid = 0
     contracts_before = 0
     contracts_after = 0
+    removed_dte_total = 0
+    removed_strike_total = 0
 
     for plan in plans:
         if len(descriptors) < 3:
@@ -677,6 +1002,8 @@ def stage_greeks_for_plans(
         requests_attempted += 1
         contracts_before += attempt.contracts_before_filter
         contracts_after += attempt.contracts_after_filter
+        removed_dte_total += attempt.removed_by_dte
+        removed_strike_total += attempt.removed_by_strike
         if attempt.outcome == "error":
             requests_error += 1
             if attempt.error_summary and len(error_summaries) < 3:
@@ -706,6 +1033,8 @@ def stage_greeks_for_plans(
                     allow_bs_fallback=allow_bs_fallback,
                     fallback_volatility_proxy=fallback_volatility_proxy,
                     min_time_to_expiry_days=min_time_to_expiry_days,
+                    row_mode=row_mode,
+                    row_source=row_source,
                 )
             )
 
@@ -724,6 +1053,11 @@ def stage_greeks_for_plans(
         empty_response_reasons=tuple(empty_reasons[:3]),
         error_summaries=tuple(error_summaries[:3]),
         failure_class=None,
+        staging_mode=diagnostics_mode,
+        symbols_requested=symbols_requested,
+        symbol_source=symbol_source,
+        contracts_removed_by_dte_filter=removed_dte_total,
+        contracts_removed_by_strike_filter=removed_strike_total,
     )
     failure = resolve_fetch_failure_class(diag)
     diag = replace(diag, failure_class=failure)
