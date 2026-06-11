@@ -32,6 +32,10 @@ If the CSV is missing or empty, generation returns **zero candidates** and docum
 
 A future packet may add an explicit, tested PMP proxy; Claude/subagent advisory cannot supply PMP.
 
+## PMP proxy (PMP-C1)
+
+When vendor `probability_of_profit` is missing, `estimate_pmp_proxy` uses **short-leg |delta|** (credit spreads: `1 - |delta|`). Proxy PMP must lie in **0.25–0.90** (table range); values are **not clamped**. Status **`PMP_PROXY_AVAILABLE`** enables spread math; **`candidate_pass`** still requires full Option Alpha gate (economics + table R/R + EV rules). Confidence: **MEDIUM** (`alpaca_snapshot`), **LOW** (`computed_bs`), **MISSING** (no delta).
+
 ## Greeks confidence
 
 `computed_bs` staging rows may pair into spreads for quote-driven math; leg columns `long_greeks_source` / `long_greeks_confidence` (and short leg) record **lower confidence** than vendor snapshot greeks. Missing greeks rows with valid bid/ask may still pair; they do not imply greek-dependent confidence.

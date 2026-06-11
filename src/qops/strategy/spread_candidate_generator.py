@@ -32,6 +32,7 @@ from qops.strategy.constants import (
     DEFAULT_BULL_PUT_CREDIT_WIDTH,
     MIN_DTE,
 )
+from qops.risk.pmp_proxy import PMPProxyResult, SpreadPmpProxyInput, estimate_pmp_proxy
 from qops.strategy.spread_builder import build_structure_candidate
 from qops.strategy.spread_math import SpreadMathEvaluation, SpreadMathInputs, evaluate_spread_math
 
@@ -79,10 +80,27 @@ class GeneratedSpreadCandidate:
     long_greeks_confidence: str
     short_greeks_source: str
     short_greeks_confidence: str
+    pmp_for_gate: float | None
+    pmp_source: str
+    pmp_method: str
+    pmp_proxy_status: str
+    pmp_confidence: str
+    pmp_inputs_used: tuple[str, ...]
 
 
-def _pmp_status(probability_of_profit: float | None) -> str:
-    return "MISSING" if probability_of_profit is None else "PRESENT"
+def _pmp_status_label(
+    *,
+    vendor_pmp: float | None,
+    proxy_status: str,
+    pmp_for_gate: float | None,
+) -> str:
+    if vendor_pmp is not None:
+        return "PRESENT"
+    if proxy_status == "PMP_PROXY_AVAILABLE" and pmp_for_gate is not None:
+        return "PMP_PROXY_AVAILABLE"
+    if proxy_status in {"MISSING_INPUTS", "OUTSIDE_POLICY_RANGE", "INVALID_INPUTS"}:
+        return proxy_status
+    return "MISSING"
 
 
 def _math_status(math: SpreadMathEvaluation, *, candidate_pass: bool) -> str:
@@ -233,8 +251,36 @@ def _builder_applicable(playbook: AllowedPlaybook, spread_width: float) -> bool:
     return spread_width == _default_width_for_playbook(playbook)
 
 
-def _candidate_pass(math: SpreadMathEvaluation, probability_of_profit: float | None) -> bool:
-    if probability_of_profit is None:
+def _resolve_pmp_for_gate(
+    *,
+    structure_type: str,
+    vendor_pmp: float | None,
+    short_row: StagedGreeksQuoteRow,
+) -> tuple[float | None, PMPProxyResult | None]:
+    if vendor_pmp is not None:
+        proxy = estimate_pmp_proxy(
+            SpreadPmpProxyInput(
+                structure_type=structure_type,
+                short_leg_delta=short_row.quote.delta,
+                short_leg_greeks_source=short_row.quote.greeks_source,
+                vendor_probability_of_profit=vendor_pmp,
+            )
+        )
+        if proxy.pmp is not None:
+            return proxy.pmp, proxy
+        return None, proxy
+    proxy = estimate_pmp_proxy(
+        SpreadPmpProxyInput(
+            structure_type=structure_type,
+            short_leg_delta=short_row.quote.delta,
+            short_leg_greeks_source=short_row.quote.greeks_source,
+        )
+    )
+    return proxy.pmp, proxy
+
+
+def _candidate_pass(math: SpreadMathEvaluation, pmp_for_gate: float | None) -> bool:
+    if pmp_for_gate is None:
         return False
     return math.passes_spread_math_gate
 
@@ -255,7 +301,27 @@ def _emit_candidate(
     if not math.isfinite(spread_width) or not math.isfinite(net_debit_or_credit):
         return None
 
-    pmp = long_row.probability_of_profit if long_row.probability_of_profit is not None else short_row.probability_of_profit
+    vendor_pmp = (
+        long_row.probability_of_profit
+        if long_row.probability_of_profit is not None
+        else short_row.probability_of_profit
+    )
+    pmp_for_gate, proxy_result = _resolve_pmp_for_gate(
+        structure_type=structure_type,
+        vendor_pmp=vendor_pmp,
+        short_row=short_row,
+    )
+    if proxy_result is None:
+        proxy_result = PMPProxyResult(
+            pmp=None,
+            pmp_source="missing",
+            pmp_method="none",
+            pmp_status="MISSING_INPUTS",
+            confidence="MISSING",
+            inputs_used=(),
+            failure_reasons=("missing_probability_of_profit",),
+        )
+
     math_eval = evaluate_spread_math(
         SpreadMathInputs(
             structure_type=structure_type,
@@ -263,9 +329,10 @@ def _emit_candidate(
             net_debit_or_credit=net_debit_or_credit,
             reference_strike=reference_strike,
         ),
-        probability_of_profit=pmp,
+        probability_of_profit=pmp_for_gate,
     )
     failure_reasons = list(math_eval.failure_reasons)
+    failure_reasons.extend(proxy_result.failure_reasons)
     builder_ok = False
     if try_builder and _builder_applicable(playbook, spread_width) and math_eval.passes_spread_math_gate:
         try:
@@ -277,14 +344,14 @@ def _emit_candidate(
                 ),
                 net_debit_or_credit,
                 reference_strike=reference_strike,
-                probability_of_profit=pmp,
+                probability_of_profit=pmp_for_gate,
             )
             builder_ok = True
         except ValueError as exc:
             failure_reasons.append(str(exc))
 
-    passed = _candidate_pass(math_eval, pmp)
-    if not passed and pmp is None and not failure_reasons:
+    passed = _candidate_pass(math_eval, pmp_for_gate)
+    if not passed and pmp_for_gate is None and "missing_probability_of_profit" not in failure_reasons:
         failure_reasons.append("missing_probability_of_profit")
 
     return GeneratedSpreadCandidate(
@@ -297,7 +364,7 @@ def _emit_candidate(
         spread_width=spread_width,
         net_debit_or_credit=net_debit_or_credit,
         reference_strike=reference_strike,
-        probability_of_profit=pmp,
+        probability_of_profit=vendor_pmp,
         math=math_eval,
         candidate_pass=passed,
         builder_succeeded=builder_ok,
@@ -308,6 +375,12 @@ def _emit_candidate(
         long_greeks_confidence=long_row.quote.greeks_confidence,
         short_greeks_source=short_row.quote.greeks_source,
         short_greeks_confidence=short_row.quote.greeks_confidence,
+        pmp_for_gate=pmp_for_gate,
+        pmp_source=proxy_result.pmp_source,
+        pmp_method=proxy_result.pmp_method,
+        pmp_proxy_status=proxy_result.pmp_status,
+        pmp_confidence=proxy_result.confidence,
+        pmp_inputs_used=proxy_result.inputs_used,
     )
 
 
@@ -501,7 +574,17 @@ def spread_candidates_to_dataframe(candidates: list[GeneratedSpreadCandidate]) -
                 "net_debit_or_credit": c.net_debit_or_credit,
                 "reference_strike": c.reference_strike,
                 "probability_of_profit": c.probability_of_profit,
-                "pmp_status": _pmp_status(c.probability_of_profit),
+                "pmp_for_gate": c.pmp_for_gate,
+                "pmp_status": _pmp_status_label(
+                    vendor_pmp=c.probability_of_profit,
+                    proxy_status=c.pmp_proxy_status,
+                    pmp_for_gate=c.pmp_for_gate,
+                ),
+                "pmp_source": c.pmp_source,
+                "pmp_method": c.pmp_method,
+                "pmp_proxy_status": c.pmp_proxy_status,
+                "pmp_confidence": c.pmp_confidence,
+                "pmp_inputs_used": "|".join(c.pmp_inputs_used),
                 "max_profit": c.math.max_profit,
                 "max_loss": c.math.max_loss,
                 "reward_risk": c.math.reward_risk,
@@ -533,7 +616,18 @@ def summarize_spread_generation(
     for c in candidates:
         for reason in c.failure_reasons:
             failure_counts[reason] = failure_counts.get(reason, 0) + 1
-    incomplete_pmp = sum(1 for c in candidates if c.probability_of_profit is None)
+    incomplete_pmp = sum(1 for c in candidates if c.pmp_for_gate is None)
+    proxy_available = sum(1 for c in candidates if c.pmp_proxy_status == "PMP_PROXY_AVAILABLE")
+    proxy_missing = sum(
+        1
+        for c in candidates
+        if c.probability_of_profit is None and c.pmp_proxy_status != "PMP_PROXY_AVAILABLE"
+    )
+    pmp_source_counts: dict[str, int] = {}
+    pmp_confidence_counts: dict[str, int] = {}
+    for c in candidates:
+        pmp_source_counts[c.pmp_source] = pmp_source_counts.get(c.pmp_source, 0) + 1
+        pmp_confidence_counts[c.pmp_confidence] = pmp_confidence_counts.get(c.pmp_confidence, 0) + 1
     passing = sum(1 for c in candidates if c.candidate_pass)
     math_pass = sum(1 for c in candidates if c.math.passes_spread_math_gate)
     return {
@@ -542,5 +636,9 @@ def summarize_spread_generation(
         "candidates_passing_math_gate": math_pass,
         "candidates_pass": passing,
         "candidates_incomplete_missing_pmp": incomplete_pmp,
+        "pmp_proxy_available_count": proxy_available,
+        "pmp_proxy_missing_count": proxy_missing,
+        "pmp_source_counts": pmp_source_counts,
+        "pmp_confidence_counts": pmp_confidence_counts,
         "failure_reason_counts": failure_counts,
     }

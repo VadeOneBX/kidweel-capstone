@@ -6,7 +6,6 @@ from qops.backtest.alpaca_greeks_layer import AlpacaGreeksCandidateRow
 from qops.schemas.playbook import AllowedPlaybook
 from qops.strategy.spread_candidate_generator import (
     StagedGreeksQuoteRow,
-    _pmp_status,
     generate_spread_candidates,
     summarize_spread_generation,
 )
@@ -20,6 +19,7 @@ def _quote_row(
     bid: float,
     ask: float,
     pmp: float | None = None,
+    delta: float | None = 0.4,
 ) -> StagedGreeksQuoteRow:
     base = AlpacaGreeksCandidateRow(
         underlying_symbol="SPY",
@@ -33,7 +33,7 @@ def _quote_row(
         ask=ask,
         mid=(bid + ask) / 2.0,
         latest_trade=None,
-        delta=0.4,
+        delta=delta,
         gamma=0.02,
         theta=-0.05,
         vega=0.1,
@@ -69,14 +69,27 @@ def test_bull_call_spread_from_quotes() -> None:
 
 def test_missing_pmp_not_pass() -> None:
     rows = [
-        _quote_row(option_symbol="C420", strike=420.0, option_type="call", bid=4.5, ask=4.6),
-        _quote_row(option_symbol="C425", strike=425.0, option_type="call", bid=1.4, ask=1.5),
+        _quote_row(option_symbol="C420", strike=420.0, option_type="call", bid=4.5, ask=4.6, delta=0.5),
+        _quote_row(option_symbol="C425", strike=425.0, option_type="call", bid=1.4, ask=1.5, delta=None),
     ]
     candidates = generate_spread_candidates(rows, structures=[AllowedPlaybook.BULL_CALL_SPREAD.value])
     assert len(candidates) == 1
-    assert candidates[0].math.probability_status == "INCOMPLETE"
+    assert candidates[0].pmp_for_gate is None
+    assert candidates[0].pmp_proxy_status == "MISSING_INPUTS"
     assert candidates[0].candidate_pass is False
-    assert _pmp_status(candidates[0].probability_of_profit) == "MISSING"
+
+
+def test_pmp_delta_proxy_can_pass() -> None:
+    rows = [
+        _quote_row(option_symbol="C420", strike=420.0, option_type="call", bid=1.45, ask=1.50, delta=0.5),
+        _quote_row(option_symbol="C425", strike=425.0, option_type="call", bid=0.45, ask=0.50, delta=0.35),
+    ]
+    candidates = generate_spread_candidates(rows, structures=[AllowedPlaybook.BULL_CALL_SPREAD.value])
+    assert len(candidates) == 1
+    c = candidates[0]
+    assert c.pmp_proxy_status == "PMP_PROXY_AVAILABLE"
+    assert c.pmp_for_gate == 0.35
+    assert c.candidate_pass is True
 
 
 def test_empty_input_summary() -> None:

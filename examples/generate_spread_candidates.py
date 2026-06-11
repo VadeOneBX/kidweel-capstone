@@ -71,6 +71,12 @@ def main(argv: list[str] | None = None) -> None:
     print(f"candidates_passing_math_gate: {summary['candidates_passing_math_gate']}")
     print(f"candidates_pass: {summary['candidates_pass']}")
     print(f"candidates_incomplete_missing_pmp: {summary['candidates_incomplete_missing_pmp']}")
+    print(f"pmp_proxy_available_count: {summary['pmp_proxy_available_count']}")
+    print(f"pmp_proxy_missing_count: {summary['pmp_proxy_missing_count']}")
+    print("pmp_source_counts:")
+    print(json.dumps(summary["pmp_source_counts"], indent=2))
+    print("pmp_confidence_counts:")
+    print(json.dumps(summary["pmp_confidence_counts"], indent=2))
     print("failure_reason_counts:")
     print(json.dumps(summary["failure_reason_counts"], indent=2))
 
