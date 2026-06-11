@@ -75,6 +75,26 @@ class GeneratedSpreadCandidate:
     failure_reasons: tuple[str, ...]
     provenance: str
     greeks_provenance: str
+    long_greeks_source: str
+    long_greeks_confidence: str
+    short_greeks_source: str
+    short_greeks_confidence: str
+
+
+def _pmp_status(probability_of_profit: float | None) -> str:
+    return "MISSING" if probability_of_profit is None else "PRESENT"
+
+
+def _math_status(math: SpreadMathEvaluation, *, candidate_pass: bool) -> str:
+    if candidate_pass:
+        return "PASS"
+    if math.probability_status == "INCOMPLETE":
+        return "INCOMPLETE"
+    if math.ev_status in {"WATCH", "INCOMPLETE"}:
+        return math.ev_status
+    if not math.passes_spread_math_gate:
+        return "WATCH"
+    return math.ev_status
 
 
 def load_greeks_quote_rows(path: str | Path) -> list[StagedGreeksQuoteRow]:
@@ -99,6 +119,10 @@ def load_greeks_quote_rows(path: str | Path) -> list[StagedGreeksQuoteRow]:
                     kwargs[name] = None
                 elif name == "volatility_is_proxy":
                     kwargs[name] = False
+                elif name in {"mode", "source"}:
+                    kwargs[name] = (
+                        "historical_replay" if name == "mode" else "alpaca_greeks_c1_staging"
+                    )
                 else:
                     kwargs[name] = ""
                 continue
@@ -114,13 +138,16 @@ def load_greeks_quote_rows(path: str | Path) -> list[StagedGreeksQuoteRow]:
                 kwargs[name] = str(raw).strip()
         if kwargs.get("current_price") is None:
             continue
+        q = AlpacaGreeksCandidateRow(**kwargs)  # type: ignore[arg-type]
+        if q.bid is None or q.ask is None:
+            continue
         pmp_raw = series.get("probability_of_profit") if "probability_of_profit" in series.index else None
         pmp: float | None = None
         if pmp_raw is not None and not (isinstance(pmp_raw, float) and pd.isna(pmp_raw)):
             pmp = float(pmp_raw)
         out.append(
             StagedGreeksQuoteRow(
-                quote=AlpacaGreeksCandidateRow(**kwargs),  # type: ignore[arg-type]
+                quote=q,
                 probability_of_profit=pmp,
             )
         )
@@ -277,6 +304,10 @@ def _emit_candidate(
         failure_reasons=tuple(dict.fromkeys(failure_reasons)),
         provenance=PROVENANCE_TAG,
         greeks_provenance=long_row.quote.provenance,
+        long_greeks_source=long_row.quote.greeks_source,
+        long_greeks_confidence=long_row.quote.greeks_confidence,
+        short_greeks_source=short_row.quote.greeks_source,
+        short_greeks_confidence=short_row.quote.greeks_confidence,
     )
 
 
@@ -470,12 +501,22 @@ def spread_candidates_to_dataframe(candidates: list[GeneratedSpreadCandidate]) -
                 "net_debit_or_credit": c.net_debit_or_credit,
                 "reference_strike": c.reference_strike,
                 "probability_of_profit": c.probability_of_profit,
+                "pmp_status": _pmp_status(c.probability_of_profit),
+                "max_profit": c.math.max_profit,
+                "max_loss": c.math.max_loss,
                 "reward_risk": c.math.reward_risk,
+                "break_even": c.math.break_even,
+                "capital_at_risk": c.math.capital_at_risk,
                 "passes_spread_math_gate": c.math.passes_spread_math_gate,
                 "probability_status": c.math.probability_status,
                 "ev_status": c.math.ev_status,
+                "math_status": _math_status(c.math, candidate_pass=c.candidate_pass),
                 "candidate_pass": c.candidate_pass,
                 "builder_succeeded": c.builder_succeeded,
+                "long_greeks_source": c.long_greeks_source,
+                "long_greeks_confidence": c.long_greeks_confidence,
+                "short_greeks_source": c.short_greeks_source,
+                "short_greeks_confidence": c.short_greeks_confidence,
                 "failure_reasons": "|".join(c.failure_reasons),
                 "provenance": c.provenance,
                 "greeks_provenance": c.greeks_provenance,

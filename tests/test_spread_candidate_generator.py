@@ -6,6 +6,7 @@ from qops.backtest.alpaca_greeks_layer import AlpacaGreeksCandidateRow
 from qops.schemas.playbook import AllowedPlaybook
 from qops.strategy.spread_candidate_generator import (
     StagedGreeksQuoteRow,
+    _pmp_status,
     generate_spread_candidates,
     summarize_spread_generation,
 )
@@ -75,6 +76,7 @@ def test_missing_pmp_not_pass() -> None:
     assert len(candidates) == 1
     assert candidates[0].math.probability_status == "INCOMPLETE"
     assert candidates[0].candidate_pass is False
+    assert _pmp_status(candidates[0].probability_of_profit) == "MISSING"
 
 
 def test_empty_input_summary() -> None:

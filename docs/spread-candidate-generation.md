@@ -22,6 +22,20 @@ Optional column: `probability_of_profit` (never fabricated).
 
 If the CSV is missing or empty, generation returns **zero candidates** and documents that fetched quote rows are required.
 
+## PMP rule
+
+**PMP is never fabricated.** If `probability_of_profit` is absent from staging input:
+
+- Spread economics still compute (`max_profit`, `max_loss`, `reward_risk`, `break_even`, `capital_at_risk`).
+- `pmp_status` is **MISSING**; `math_status` is **INCOMPLETE** or **WATCH**.
+- **`candidate_pass` is false** even when core debit/credit math is valid.
+
+A future packet may add an explicit, tested PMP proxy; Claude/subagent advisory cannot supply PMP.
+
+## Greeks confidence
+
+`computed_bs` staging rows may pair into spreads for quote-driven math; leg columns `long_greeks_source` / `long_greeks_confidence` (and short leg) record **lower confidence** than vendor snapshot greeks. Missing greeks rows with valid bid/ask may still pair; they do not imply greek-dependent confidence.
+
 ## Quote pairing
 
 | Structure | Long leg | Short leg | Premium |
