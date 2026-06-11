@@ -1,0 +1,520 @@
+"""Alpaca-first greeks staging for narrowed blueprint plans (no execution, no Databento)."""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass, fields
+from datetime import date, datetime
+from pathlib import Path
+from typing import Any, Literal
+
+import pandas as pd
+
+from qops.backtest.alpaca_blueprint_adapter import (
+    AlpacaBlueprintReplayPlanRow,
+    build_blueprint_request_plan,
+    filter_ready_for_fetch,
+    load_availability_plan,
+)
+from qops.bridge.chain_snapshot_export import parse_occ_us_option_contract
+
+PROVENANCE_TAG = "alpaca_greeks_c1_staging"
+
+GreeksSource = Literal["alpaca_snapshot", "computed_bs", "missing"]
+GreeksStatus = Literal["AVAILABLE", "COMPUTED", "MISSING", "INVALID_INPUTS"]
+GreeksConfidence = Literal["high", "medium", "low", "none"]
+
+
+@dataclass(frozen=True, slots=True)
+class AlpacaGreeksCandidateRow:
+    underlying_symbol: str
+    trade_date: str
+    current_price: float
+    option_symbol: str
+    expiration: str
+    strike: float
+    option_type: str
+    bid: float | None
+    ask: float | None
+    mid: float | None
+    latest_trade: float | None
+    delta: float | None
+    gamma: float | None
+    theta: float | None
+    vega: float | None
+    rho: float | None
+    implied_volatility: float | None
+    greeks_source: GreeksSource
+    greeks_status: GreeksStatus
+    greeks_confidence: GreeksConfidence
+    volatility_is_proxy: bool
+    provenance: str
+    blueprint_provenance: str
+    source_profile: str
+    has_spy_context: bool
+
+
+def load_blueprint_plan_from_csv(path: str | Path) -> list[AlpacaBlueprintReplayPlanRow]:
+    p = Path(path)
+    if not p.is_file():
+        raise FileNotFoundError(f"blueprint replay plan csv not found: {p.resolve()}")
+    df = pd.read_csv(p)
+    out: list[AlpacaBlueprintReplayPlanRow] = []
+    for _, series in df.iterrows():
+        kwargs: dict[str, object] = {}
+        for f in fields(AlpacaBlueprintReplayPlanRow):
+            name = f.name
+            raw = series[name] if name in series.index else None
+            if raw is None or (isinstance(raw, float) and pd.isna(raw)):
+                if name in {"dte_min", "dte_max"}:
+                    kwargs[name] = 0
+                elif name == "has_spy_context":
+                    kwargs[name] = False
+                elif name == "current_price":
+                    kwargs[name] = 0.0
+                else:
+                    kwargs[name] = ""
+                continue
+            if name == "has_spy_context":
+                kwargs[name] = str(raw).strip().lower() in {"1", "true", "yes"} if not isinstance(raw, bool) else raw
+            elif name in {"dte_min", "dte_max"}:
+                kwargs[name] = int(raw)
+            elif name in {"current_price", "strike_lower_bound", "strike_upper_bound"}:
+                kwargs[name] = float(raw)
+            else:
+                kwargs[name] = str(raw).strip()
+        out.append(AlpacaBlueprintReplayPlanRow(**kwargs))  # type: ignore[arg-type]
+    return out
+
+
+def load_blueprint_request_plans(
+    *,
+    input_csv: Path,
+    availability_csv: Path,
+    candidates_csv: Path,
+    spotgamma_root: Path,
+    rebuild_if_missing: bool,
+    dte_min: int,
+    dte_max: int,
+    strike_buffer_pct: float,
+    limit: int | None,
+) -> tuple[list[AlpacaBlueprintReplayPlanRow], str]:
+    if input_csv.is_file():
+        plans = load_blueprint_plan_from_csv(input_csv)
+        if limit is not None and limit > 0:
+            plans = plans[:limit]
+        return plans, "blueprint_plan_csv"
+    if not rebuild_if_missing:
+        raise SystemExit(
+            f"Blueprint plan not found: {input_csv}. Pass --rebuild-if-missing to rebuild via C4A."
+        )
+    availability, _ = load_availability_plan(
+        input_csv=availability_csv,
+        candidates_csv=candidates_csv,
+        spotgamma_root=spotgamma_root,
+        rebuild_if_missing=True,
+        dte_min=dte_min,
+        dte_max=dte_max,
+    )
+    ready = filter_ready_for_fetch(availability)
+    plans = build_blueprint_request_plan(
+        ready,
+        dte_min=dte_min,
+        dte_max=dte_max,
+        strike_buffer_pct=strike_buffer_pct,
+        limit=limit,
+    )
+    return plans, "rebuilt_c4a_blueprint_plan"
+
+
+def _parse_expiration_window(expiration_window: str) -> tuple[date, date]:
+    parts = expiration_window.strip().split("..")
+    if len(parts) != 2:
+        raise ValueError(f"invalid expiration_window: {expiration_window!r}")
+    return date.fromisoformat(parts[0].strip()), date.fromisoformat(parts[1].strip())
+
+
+def _years_to_expiry(trade_date: str, expiration: str) -> float:
+    td = date.fromisoformat(trade_date.strip())
+    exp = date.fromisoformat(expiration.strip())
+    return (exp - td).days / 365.25
+
+
+def _norm_cdf(x: float) -> float:
+    return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+
+
+def _norm_pdf(x: float) -> float:
+    return math.exp(-0.5 * x * x) / math.sqrt(2.0 * math.pi)
+
+
+def compute_bsm_greeks(
+    *,
+    underlying_price: float,
+    strike: float,
+    time_years: float,
+    risk_free_rate: float,
+    implied_volatility: float,
+    option_type: str,
+) -> dict[str, float]:
+    if time_years <= 0 or implied_volatility <= 0 or underlying_price <= 0 or strike <= 0:
+        raise ValueError("invalid BSM inputs")
+    sigma = implied_volatility
+    t = time_years
+    r = risk_free_rate
+    s = underlying_price
+    k = strike
+    sqrt_t = math.sqrt(t)
+    d1 = (math.log(s / k) + (r + 0.5 * sigma * sigma) * t) / (sigma * sqrt_t)
+    d2 = d1 - sigma * sqrt_t
+    pdf_d1 = _norm_pdf(d1)
+    if option_type == "call":
+        delta = _norm_cdf(d1)
+        theta = (
+            -(s * pdf_d1 * sigma) / (2.0 * sqrt_t)
+            - r * k * math.exp(-r * t) * _norm_cdf(d2)
+        ) / 365.25
+        rho = k * t * math.exp(-r * t) * _norm_cdf(d2) / 100.0
+    elif option_type == "put":
+        delta = _norm_cdf(d1) - 1.0
+        theta = (
+            -(s * pdf_d1 * sigma) / (2.0 * sqrt_t)
+            + r * k * math.exp(-r * t) * _norm_cdf(-d2)
+        ) / 365.25
+        rho = -k * t * math.exp(-r * t) * _norm_cdf(-d2) / 100.0
+    else:
+        raise ValueError(f"unknown option_type: {option_type!r}")
+    gamma = pdf_d1 / (s * sigma * sqrt_t)
+    vega = s * pdf_d1 * sqrt_t / 100.0
+    return {
+        "delta": delta,
+        "gamma": gamma,
+        "theta": theta,
+        "vega": vega,
+        "rho": rho,
+    }
+
+
+def _float_or_none(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return None
+    return out if math.isfinite(out) else None
+
+
+def _extract_quote(snap: dict[str, Any]) -> tuple[float | None, float | None, float | None]:
+    quote = snap.get("latestQuote") or snap.get("latest_quote") or {}
+    if not isinstance(quote, dict):
+        quote = {}
+    bid = _float_or_none(quote.get("bp") or quote.get("bid_price"))
+    ask = _float_or_none(quote.get("ap") or quote.get("ask_price"))
+    mid = None
+    if bid is not None and ask is not None:
+        mid = (bid + ask) / 2.0
+    return bid, ask, mid
+
+
+def _extract_latest_trade(snap: dict[str, Any]) -> float | None:
+    trade = snap.get("latestTrade") or snap.get("latest_trade") or {}
+    if not isinstance(trade, dict):
+        return None
+    return _float_or_none(trade.get("p") or trade.get("price"))
+
+
+def _extract_iv(snap: dict[str, Any]) -> float | None:
+    return _float_or_none(
+        snap.get("impliedVolatility")
+        or snap.get("implied_volatility")
+        or snap.get("iv")
+    )
+
+
+def _extract_alpaca_greeks(snap: dict[str, Any]) -> dict[str, float | None]:
+    g = snap.get("greeks") or snap.get("Greeks") or {}
+    if not isinstance(g, dict):
+        g = {}
+    return {
+        "delta": _float_or_none(g.get("delta")),
+        "gamma": _float_or_none(g.get("gamma")),
+        "theta": _float_or_none(g.get("theta")),
+        "vega": _float_or_none(g.get("vega")),
+        "rho": _float_or_none(g.get("rho")),
+    }
+
+
+def _alpaca_greeks_complete(g: dict[str, float | None]) -> bool:
+    return g.get("delta") is not None and g.get("gamma") is not None
+
+
+def _filter_chain_snapshots(
+    snapshots: dict[str, Any],
+    plan: AlpacaBlueprintReplayPlanRow,
+) -> dict[str, Any]:
+    exp_lo, exp_hi = _parse_expiration_window(plan.expiration_window)
+    filtered: dict[str, Any] = {}
+    for contract_symbol, snap in snapshots.items():
+        if not isinstance(snap, dict):
+            continue
+        try:
+            expiration, strike, option_type = parse_occ_us_option_contract(str(contract_symbol))
+        except ValueError:
+            continue
+        if option_type not in {"call", "put"}:
+            continue
+        exp_d = date.fromisoformat(expiration)
+        if exp_d < exp_lo or exp_d > exp_hi:
+            continue
+        if strike < plan.strike_lower_bound or strike > plan.strike_upper_bound:
+            continue
+        filtered[str(contract_symbol)] = snap
+    return filtered
+
+
+def _effective_time_years(
+    trade_date: str,
+    expiration: str,
+    *,
+    min_time_to_expiry_days: float | None,
+) -> tuple[float | None, GreeksStatus | None]:
+    t = _years_to_expiry(trade_date, expiration)
+    if t <= 0.0:
+        if min_time_to_expiry_days is None:
+            return None, "INVALID_INPUTS"
+        floor = min_time_to_expiry_days / 365.25
+        if floor <= 0.0:
+            return None, "INVALID_INPUTS"
+        return floor, None
+    return t, None
+
+
+def enrich_contract_row(
+    *,
+    plan: AlpacaBlueprintReplayPlanRow,
+    option_symbol: str,
+    expiration: str,
+    strike: float,
+    option_type: str,
+    snap: dict[str, Any] | None,
+    risk_free_rate: float,
+    allow_bs_fallback: bool,
+    fallback_volatility_proxy: float | None,
+    min_time_to_expiry_days: float | None,
+) -> AlpacaGreeksCandidateRow:
+    bid, ask, mid = (None, None, None)
+    latest_trade = None
+    iv = None
+    greeks = {"delta": None, "gamma": None, "theta": None, "vega": None, "rho": None}
+    source: GreeksSource = "missing"
+    status: GreeksStatus = "MISSING"
+    confidence: GreeksConfidence = "none"
+    vol_proxy = False
+
+    if snap is not None:
+        bid, ask, mid = _extract_quote(snap)
+        latest_trade = _extract_latest_trade(snap)
+        iv = _extract_iv(snap)
+        greeks = _extract_alpaca_greeks(snap)
+
+    if bid is None or ask is None:
+        return AlpacaGreeksCandidateRow(
+            underlying_symbol=plan.symbol,
+            trade_date=plan.trade_date,
+            current_price=plan.current_price,
+            option_symbol=option_symbol,
+            expiration=expiration,
+            strike=strike,
+            option_type=option_type,
+            bid=bid,
+            ask=ask,
+            mid=mid,
+            latest_trade=latest_trade,
+            delta=greeks["delta"],
+            gamma=greeks["gamma"],
+            theta=greeks["theta"],
+            vega=greeks["vega"],
+            rho=greeks["rho"],
+            implied_volatility=iv,
+            greeks_source="missing",
+            greeks_status="INVALID_INPUTS",
+            greeks_confidence="none",
+            volatility_is_proxy=False,
+            provenance=PROVENANCE_TAG,
+            blueprint_provenance=plan.provenance,
+            source_profile=plan.source_profile,
+            has_spy_context=plan.has_spy_context,
+        )
+
+    if _alpaca_greeks_complete(greeks):
+        source = "alpaca_snapshot"
+        status = "AVAILABLE"
+        confidence = "high"
+    elif allow_bs_fallback:
+        sigma = iv
+        if sigma is None and fallback_volatility_proxy is not None and fallback_volatility_proxy > 0:
+            sigma = fallback_volatility_proxy
+            vol_proxy = True
+        if sigma is None:
+            status = "MISSING"
+        else:
+            t_eff, invalid = _effective_time_years(
+                plan.trade_date,
+                expiration,
+                min_time_to_expiry_days=min_time_to_expiry_days,
+            )
+            if invalid is not None:
+                status = invalid
+            elif t_eff is None:
+                status = "MISSING"
+            else:
+                try:
+                    computed = compute_bsm_greeks(
+                        underlying_price=plan.current_price,
+                        strike=strike,
+                        time_years=t_eff,
+                        risk_free_rate=risk_free_rate,
+                        implied_volatility=sigma,
+                        option_type=option_type,
+                    )
+                    greeks = {k: computed[k] for k in greeks}
+                    source = "computed_bs"
+                    status = "COMPUTED"
+                    confidence = "medium" if not vol_proxy else "low"
+                    if iv is None:
+                        iv = sigma
+                except ValueError:
+                    status = "INVALID_INPUTS"
+    else:
+        status = "MISSING"
+
+    return AlpacaGreeksCandidateRow(
+        underlying_symbol=plan.symbol,
+        trade_date=plan.trade_date,
+        current_price=plan.current_price,
+        option_symbol=option_symbol,
+        expiration=expiration,
+        strike=strike,
+        option_type=option_type,
+        bid=bid,
+        ask=ask,
+        mid=mid,
+        latest_trade=latest_trade,
+        delta=greeks["delta"],
+        gamma=greeks["gamma"],
+        theta=greeks["theta"],
+        vega=greeks["vega"],
+        rho=greeks["rho"],
+        implied_volatility=iv,
+        greeks_source=source,
+        greeks_status=status,
+        greeks_confidence=confidence,
+        volatility_is_proxy=vol_proxy,
+        provenance=PROVENANCE_TAG,
+        blueprint_provenance=plan.provenance,
+        source_profile=plan.source_profile,
+        has_spy_context=plan.has_spy_context,
+    )
+
+
+def fetch_alpaca_chain_snapshots(
+    client: Any,
+    plan: AlpacaBlueprintReplayPlanRow,
+) -> dict[str, Any]:
+    from alpaca.data.requests import OptionChainRequest
+
+    exp_lo, exp_hi = _parse_expiration_window(plan.expiration_window)
+    request = OptionChainRequest(
+        underlying_symbol=plan.symbol,
+        expiration_date_gte=exp_lo,
+        expiration_date_lte=exp_hi,
+    )
+    raw = client.get_option_chain(request)
+    if not isinstance(raw, dict):
+        return {}
+    return _filter_chain_snapshots(raw, plan)
+
+
+def stage_greeks_for_plans(
+    plans: list[AlpacaBlueprintReplayPlanRow],
+    *,
+    fetch: bool,
+    client: Any | None,
+    risk_free_rate: float,
+    allow_bs_fallback: bool,
+    fallback_volatility_proxy: float | None,
+    min_time_to_expiry_days: float | None,
+) -> tuple[list[AlpacaGreeksCandidateRow], bool]:
+    rows: list[AlpacaGreeksCandidateRow] = []
+    fetch_attempted = False
+    if not fetch:
+        return rows, fetch_attempted
+    if client is None:
+        return rows, fetch_attempted
+    fetch_attempted = True
+    for plan in plans:
+        snapshots = fetch_alpaca_chain_snapshots(client, plan)
+        for option_symbol, snap in sorted(snapshots.items()):
+            try:
+                expiration, strike, option_type = parse_occ_us_option_contract(option_symbol)
+            except ValueError:
+                continue
+            rows.append(
+                enrich_contract_row(
+                    plan=plan,
+                    option_symbol=option_symbol,
+                    expiration=expiration,
+                    strike=strike,
+                    option_type=option_type,
+                    snap=snap,
+                    risk_free_rate=risk_free_rate,
+                    allow_bs_fallback=allow_bs_fallback,
+                    fallback_volatility_proxy=fallback_volatility_proxy,
+                    min_time_to_expiry_days=min_time_to_expiry_days,
+                )
+            )
+    return rows, fetch_attempted
+
+
+def greeks_candidates_to_dataframe(rows: list[AlpacaGreeksCandidateRow]) -> pd.DataFrame:
+    if not rows:
+        return pd.DataFrame(columns=[f.name for f in fields(AlpacaGreeksCandidateRow)])
+    return pd.DataFrame([{f.name: getattr(r, f.name) for f in fields(AlpacaGreeksCandidateRow)} for r in rows])
+
+
+def summarize_greeks_staging(
+    blueprint_row_count: int,
+    candidates: list[AlpacaGreeksCandidateRow],
+    *,
+    fetch_attempted: bool,
+) -> dict[str, object]:
+    source_counts: dict[str, int] = {"alpaca_snapshot": 0, "computed_bs": 0, "missing": 0}
+    status_counts: dict[str, int] = {
+        "AVAILABLE": 0,
+        "COMPUTED": 0,
+        "MISSING": 0,
+        "INVALID_INPUTS": 0,
+    }
+    for row in candidates:
+        source_counts[row.greeks_source] = source_counts.get(row.greeks_source, 0) + 1
+        status_counts[row.greeks_status] = status_counts.get(row.greeks_status, 0) + 1
+    return {
+        "blueprint_input_rows": blueprint_row_count,
+        "greeks_candidate_rows": len(candidates),
+        "fetch_attempted": fetch_attempted,
+        "greeks_source_counts": source_counts,
+        "greeks_status_counts": status_counts,
+        "missing_or_invalid_count": status_counts["MISSING"] + status_counts["INVALID_INPUTS"],
+    }
+
+
+def try_create_option_client() -> tuple[Any | None, str | None]:
+    try:
+        from alpaca.data.historical.option import OptionHistoricalDataClient
+    except ImportError as exc:
+        return None, f"import_error:{exc}"
+    try:
+        return OptionHistoricalDataClient(raw_data=True), None
+    except ValueError as exc:
+        return None, f"credential_error:{exc}"
