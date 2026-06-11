@@ -17,6 +17,8 @@ _EXECUTABLE_PLAYBOOKS: frozenset[AllowedPlaybook] = frozenset(
     {
         AllowedPlaybook.BULL_CALL_SPREAD,
         AllowedPlaybook.BEAR_PUT_SPREAD,
+        AllowedPlaybook.BULL_PUT_CREDIT_SPREAD,
+        AllowedPlaybook.BEAR_CALL_CREDIT_SPREAD,
     }
 )
 

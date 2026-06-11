@@ -18,6 +18,8 @@ _EXECUTABLE_PLAYBOOKS: frozenset[AllowedPlaybook] = frozenset(
     {
         AllowedPlaybook.BULL_CALL_SPREAD,
         AllowedPlaybook.BEAR_PUT_SPREAD,
+        AllowedPlaybook.BULL_PUT_CREDIT_SPREAD,
+        AllowedPlaybook.BEAR_CALL_CREDIT_SPREAD,
     }
 )
 
@@ -108,6 +110,22 @@ def normalize_candidate(candidate: ScreenedCandidate) -> ScreenedCandidate:
     ):
         raise ValueError(
             "allowed_playbook BEAR_PUT_SPREAD must align with structure_bias BEAR_PUT_SPREAD"
+        )
+    if (
+        candidate.allowed_playbook == AllowedPlaybook.BULL_PUT_CREDIT_SPREAD
+        and candidate.structure_bias != StructureBias.BULL_PUT_CREDIT_SPREAD
+    ):
+        raise ValueError(
+            "allowed_playbook BULL_PUT_CREDIT_SPREAD must align with structure_bias "
+            "BULL_PUT_CREDIT_SPREAD"
+        )
+    if (
+        candidate.allowed_playbook == AllowedPlaybook.BEAR_CALL_CREDIT_SPREAD
+        and candidate.structure_bias != StructureBias.BEAR_CALL_CREDIT_SPREAD
+    ):
+        raise ValueError(
+            "allowed_playbook BEAR_CALL_CREDIT_SPREAD must align with structure_bias "
+            "BEAR_CALL_CREDIT_SPREAD"
         )
 
     return candidate

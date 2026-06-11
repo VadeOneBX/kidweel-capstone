@@ -13,8 +13,8 @@ from qops.schemas.playbook import AllowedPlaybook, StructureBias
 # Policy truths (MCP-C5):
 # 1. structure_bias is upstream intent and must not be replaced downstream.
 # 2. allowed_playbook may confirm structure_bias or downgrade to SKIP only (never upgrade).
-# 3. LONG_CALL_PARKED remains non-executable in this packet (may persist as allowed state).
-# 4. LONG_GAMMA_HEDGE remains non-executable in this packet (may persist as allowed state).
+# 3. LONG_CALL_PARKED / LONG_GAMMA_HEDGE are quarantined (enum retained; selector downgrades to SKIP).
+# 4. Canonical buildable spreads: debit + credit verticals only (see spread_builder).
 # 5. UNKNOWN / incomplete / conflicting environment resolves to SKIP for new risk.
 # 6. regime_label is canonical and must not be recomputed (read-only on EnvironmentSnapshot).
 
@@ -35,8 +35,14 @@ NON_EXECUTABLE_STRUCTURE_IN_PACKET: frozenset[StructureBias] = frozenset(
 ALLOWED_ALLOWED_PLAYBOOKS: dict[StructureBias, frozenset[AllowedPlaybook]] = {
     StructureBias.BULL_CALL_SPREAD: frozenset({AllowedPlaybook.BULL_CALL_SPREAD, AllowedPlaybook.SKIP}),
     StructureBias.BEAR_PUT_SPREAD: frozenset({AllowedPlaybook.BEAR_PUT_SPREAD, AllowedPlaybook.SKIP}),
-    StructureBias.LONG_CALL_PARKED: frozenset({AllowedPlaybook.LONG_CALL_PARKED, AllowedPlaybook.SKIP}),
-    StructureBias.LONG_GAMMA_HEDGE: frozenset({AllowedPlaybook.LONG_GAMMA_HEDGE, AllowedPlaybook.SKIP}),
+    StructureBias.BULL_PUT_CREDIT_SPREAD: frozenset(
+        {AllowedPlaybook.BULL_PUT_CREDIT_SPREAD, AllowedPlaybook.SKIP}
+    ),
+    StructureBias.BEAR_CALL_CREDIT_SPREAD: frozenset(
+        {AllowedPlaybook.BEAR_CALL_CREDIT_SPREAD, AllowedPlaybook.SKIP}
+    ),
+    StructureBias.LONG_CALL_PARKED: frozenset({AllowedPlaybook.SKIP}),
+    StructureBias.LONG_GAMMA_HEDGE: frozenset({AllowedPlaybook.SKIP}),
     StructureBias.SKIP: frozenset({AllowedPlaybook.SKIP}),
 }
 

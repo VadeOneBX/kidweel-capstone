@@ -27,8 +27,8 @@ DEBIT_STRUCTURE_TYPES = frozenset(
 )
 CREDIT_STRUCTURE_TYPES = frozenset(
     {
-        "BULL_PUT_CREDIT_SPREAD",
-        "BEAR_CALL_CREDIT_SPREAD",
+        AllowedPlaybook.BULL_PUT_CREDIT_SPREAD.value,
+        AllowedPlaybook.BEAR_CALL_CREDIT_SPREAD.value,
     }
 )
 SUPPORTED_STRUCTURE_TYPES = DEBIT_STRUCTURE_TYPES | CREDIT_STRUCTURE_TYPES
@@ -88,9 +88,9 @@ def _credit_spread_max_loss(width: float, net_credit: float) -> float:
 def _credit_spread_breakeven(structure_type: str, short_strike: float, net_credit: float) -> float:
     if net_credit <= 0:
         raise ValueError("net_credit must be > 0")
-    if structure_type == "BULL_PUT_CREDIT_SPREAD":
+    if structure_type == AllowedPlaybook.BULL_PUT_CREDIT_SPREAD.value:
         return short_strike - net_credit
-    if structure_type == "BEAR_CALL_CREDIT_SPREAD":
+    if structure_type == AllowedPlaybook.BEAR_CALL_CREDIT_SPREAD.value:
         return short_strike + net_credit
     raise ValueError(f"unsupported credit structure_type for breakeven: {structure_type}")
 

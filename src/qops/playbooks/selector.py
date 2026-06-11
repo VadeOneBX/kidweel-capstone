@@ -8,7 +8,11 @@ from __future__ import annotations
 # dependents in the same packet.
 
 from qops.playbooks.conflicts import has_playbook_conflict
-from qops.playbooks.policy import allowed_playbook_domain, environment_is_incomplete
+from qops.playbooks.policy import (
+    NON_EXECUTABLE_STRUCTURE_IN_PACKET,
+    allowed_playbook_domain,
+    environment_is_incomplete,
+)
 from qops.schemas.environment import EnvironmentSnapshot
 from qops.schemas.playbook import AllowedPlaybook, PlaybookDecision, StructureBias
 
@@ -61,47 +65,23 @@ def select_allowed_playbook(
             decision_reason=conflict_reason,
         )
 
-    if structure_bias == StructureBias.LONG_CALL_PARKED:
-        chosen = AllowedPlaybook.LONG_CALL_PARKED
-        if chosen not in domain:
-            return PlaybookDecision(
-                symbol=symbol,
-                structure_bias=structure_bias,
-                allowed_playbook=AllowedPlaybook.SKIP,
-                conflict_flag=True,
-                skip_flag=True,
-                decision_reason="unmatched_non_executable_state",
-            )
+    if structure_bias in NON_EXECUTABLE_STRUCTURE_IN_PACKET:
         return PlaybookDecision(
             symbol=symbol,
             structure_bias=structure_bias,
-            allowed_playbook=chosen,
-            conflict_flag=False,
-            skip_flag=False,
-            decision_reason="confirm_non_executable_long_call_parked",
+            allowed_playbook=AllowedPlaybook.SKIP,
+            conflict_flag=True,
+            skip_flag=True,
+            decision_reason="quarantined_parked_structure_resolves_to_skip",
         )
 
-    if structure_bias == StructureBias.LONG_GAMMA_HEDGE:
-        chosen = AllowedPlaybook.LONG_GAMMA_HEDGE
-        if chosen not in domain:
-            return PlaybookDecision(
-                symbol=symbol,
-                structure_bias=structure_bias,
-                allowed_playbook=AllowedPlaybook.SKIP,
-                conflict_flag=True,
-                skip_flag=True,
-                decision_reason="unmatched_non_executable_state",
-            )
-        return PlaybookDecision(
-            symbol=symbol,
-            structure_bias=structure_bias,
-            allowed_playbook=chosen,
-            conflict_flag=False,
-            skip_flag=False,
-            decision_reason="confirm_non_executable_long_gamma_hedge",
-        )
-
-    if structure_bias in {StructureBias.BULL_CALL_SPREAD, StructureBias.BEAR_PUT_SPREAD}:
+    _EXECUTABLE_STRUCTURE_BIASES = {
+        StructureBias.BULL_CALL_SPREAD,
+        StructureBias.BEAR_PUT_SPREAD,
+        StructureBias.BULL_PUT_CREDIT_SPREAD,
+        StructureBias.BEAR_CALL_CREDIT_SPREAD,
+    }
+    if structure_bias in _EXECUTABLE_STRUCTURE_BIASES:
         chosen = _structure_to_allowed(structure_bias)
         if chosen not in domain:
             return PlaybookDecision(
