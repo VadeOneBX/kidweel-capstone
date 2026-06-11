@@ -15,9 +15,11 @@ from pathlib import Path
 
 from qops.backtest.alpaca_greeks_layer import (
     check_alpaca_market_data_credentials,
+    fetch_diagnostics_summary,
     greeks_candidates_to_dataframe,
     load_blueprint_request_plans,
     load_local_env,
+    sanitize_blueprint_descriptor,
     stage_greeks_for_plans,
     summarize_greeks_staging,
     try_create_option_client,
@@ -77,6 +79,16 @@ def main(argv: list[str] | None = None) -> None:
         type=Path,
         default=Path("data/processed/alpaca_greeks_candidates.csv"),
     )
+    p.add_argument(
+        "--debug-requests",
+        action="store_true",
+        help="Print sanitized fetch diagnostics (no secrets)",
+    )
+    p.add_argument(
+        "--fail-on-empty-fetch",
+        action="store_true",
+        help="Exit non-zero when --fetch is set and no contract rows are staged",
+    )
     ns = p.parse_args(argv)
 
     if ns.env_check:
@@ -129,7 +141,7 @@ def main(argv: list[str] | None = None) -> None:
             print(f"fetch_client: skipped ({client_error})")
             raise SystemExit(1)
 
-    candidates, fetch_attempted = stage_greeks_for_plans(
+    candidates, fetch_attempted, fetch_diag = stage_greeks_for_plans(
         plans,
         fetch=ns.fetch and client is not None,
         client=client,
@@ -144,9 +156,34 @@ def main(argv: list[str] | None = None) -> None:
     print("============================================================")
     print(f"blueprint_plan_source: {plan_source}")
     print(f"blueprint_input_rows: {summary['blueprint_input_rows']}")
+    if plans:
+        print("blueprint_rows_sample (first 3, sanitized):")
+        print(json.dumps([sanitize_blueprint_descriptor(p) for p in plans[:3]], indent=2))
     print(f"greeks_candidate_rows: {summary['greeks_candidate_rows']}")
     print(f"fetch_requested: {ns.fetch}")
     print(f"fetch_attempted: {summary['fetch_attempted']}")
+    if fetch_diag is not None:
+        diag_summary = fetch_diagnostics_summary(fetch_diag)
+        print(f"fetch_requests_attempted: {diag_summary['requests_attempted']}")
+        print(f"fetch_requests_empty: {diag_summary['requests_empty']}")
+        print(f"fetch_requests_error: {diag_summary['requests_error']}")
+        print(f"fetch_requests_invalid: {diag_summary['requests_invalid']}")
+        print(f"contracts_before_filter: {diag_summary['contracts_before_filter']}")
+        print(f"contracts_removed_by_filter: {diag_summary['contracts_removed_by_filter']}")
+        print(f"contracts_after_filter: {diag_summary['contracts_after_filter']}")
+        print(f"contracts_staged: {diag_summary['contracts_staged']}")
+        if fetch_diag.failure_class:
+            print(f"fetch_failure_class: {fetch_diag.failure_class}")
+        if ns.debug_requests:
+            print("fetch_request_descriptors_sample:")
+            print(json.dumps(diag_summary["request_descriptors_sample"], indent=2))
+            if diag_summary["empty_response_reasons_sample"]:
+                print("fetch_empty_response_reasons_sample:")
+                print(json.dumps(diag_summary["empty_response_reasons_sample"], indent=2))
+            if diag_summary["error_summaries_sample"]:
+                print("fetch_error_summaries_sample:")
+                print(json.dumps(diag_summary["error_summaries_sample"], indent=2))
+    print(f"output_target: {ns.output.resolve()}")
     if client_error:
         print(f"fetch_client: skipped ({client_error})")
     print("greeks_source_counts:")
@@ -161,6 +198,11 @@ def main(argv: list[str] | None = None) -> None:
         print(f"wrote: {ns.output.resolve()}")
     elif ns.no_write:
         print("write: skipped (--no-write)")
+
+    if ns.fail_on_empty_fetch and ns.fetch and fetch_attempted and not candidates:
+        reason = fetch_diag.failure_class if fetch_diag and fetch_diag.failure_class else "EMPTY_FETCH_RESULT"
+        print(f"fail_on_empty_fetch: {reason}")
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

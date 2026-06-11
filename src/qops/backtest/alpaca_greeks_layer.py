@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import os
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, replace
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -53,6 +53,138 @@ class AlpacaGreeksCandidateRow:
     blueprint_provenance: str
     source_profile: str
     has_spy_context: bool
+
+
+FetchFailureClass = Literal[
+    "EMPTY_FETCH_RESULT",
+    "REQUEST_INVALID",
+    "CLIENT_METHOD_UNSUPPORTED",
+    "PERMISSION_OR_SUBSCRIPTION_ERROR",
+    "API_SHAPE_MISMATCH",
+    "FILTER_REMOVED_ALL_ROWS",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class GreeksFetchDiagnostics:
+    """Aggregated read-only fetch diagnostics (no secrets)."""
+
+    fetch_attempted: bool
+    blueprint_rows: int
+    requests_attempted: int
+    requests_empty: int
+    requests_error: int
+    requests_invalid: int
+    contracts_before_filter: int
+    contracts_removed_by_filter: int
+    contracts_after_filter: int
+    contracts_staged: int
+    request_descriptors: tuple[dict[str, object], ...]
+    empty_response_reasons: tuple[str, ...]
+    error_summaries: tuple[str, ...]
+    failure_class: FetchFailureClass | None
+
+
+@dataclass(frozen=True, slots=True)
+class _FetchAttemptResult:
+    outcome: Literal["ok", "empty", "error", "invalid"]
+    contracts_before_filter: int
+    contracts_after_filter: int
+    filtered_snapshots: dict[str, Any]
+    empty_reason: str | None
+    error_summary: str | None
+
+
+def sanitize_blueprint_descriptor(plan: AlpacaBlueprintReplayPlanRow) -> dict[str, object]:
+    return {
+        "symbol": plan.symbol.strip().upper(),
+        "trade_date": plan.trade_date.strip(),
+        "expiration_window": plan.expiration_window,
+        "strike_lower_bound": plan.strike_lower_bound,
+        "strike_upper_bound": plan.strike_upper_bound,
+        "dte_min": plan.dte_min,
+        "dte_max": plan.dte_max,
+        "current_price": plan.current_price,
+    }
+
+
+def validate_blueprint_for_chain_request(plan: AlpacaBlueprintReplayPlanRow) -> tuple[bool, str | None]:
+    symbol = plan.symbol.strip()
+    if not symbol:
+        return False, "missing_symbol"
+    if not plan.trade_date.strip():
+        return False, "missing_trade_date"
+    try:
+        date.fromisoformat(plan.trade_date.strip())
+    except ValueError:
+        return False, "invalid_trade_date"
+    if not math.isfinite(plan.current_price) or plan.current_price <= 0:
+        return False, "invalid_current_price"
+    if plan.dte_min < 0 or plan.dte_max < plan.dte_min:
+        return False, "invalid_dte_window"
+    try:
+        exp_lo, exp_hi = _parse_expiration_window(plan.expiration_window)
+    except ValueError:
+        return False, "invalid_expiration_window"
+    if exp_hi < exp_lo:
+        return False, "invalid_expiration_window"
+    if not math.isfinite(plan.strike_lower_bound) or not math.isfinite(plan.strike_upper_bound):
+        return False, "invalid_strike_bounds"
+    if plan.strike_upper_bound <= plan.strike_lower_bound:
+        return False, "invalid_strike_bounds"
+    return True, None
+
+
+def _classify_fetch_exception(exc: BaseException) -> str:
+    text = f"{type(exc).__name__}:{exc}".lower()
+    if any(token in text for token in ("401", "403", "forbidden", "unauthorized", "subscription", "permission")):
+        return "PERMISSION_OR_SUBSCRIPTION_ERROR"
+    if isinstance(exc, AttributeError) or "has no attribute" in text:
+        return "CLIENT_METHOD_UNSUPPORTED"
+    return "API_SHAPE_MISMATCH"
+
+
+def resolve_fetch_failure_class(diag: GreeksFetchDiagnostics) -> FetchFailureClass | None:
+    if not diag.fetch_attempted:
+        return None
+    if diag.contracts_staged > 0:
+        return None
+    if diag.requests_invalid > 0 and diag.requests_attempted == 0:
+        return "REQUEST_INVALID"
+    if diag.requests_invalid == diag.blueprint_rows and diag.blueprint_rows > 0:
+        return "REQUEST_INVALID"
+    for err in diag.error_summaries:
+        if err.startswith("PERMISSION_OR_SUBSCRIPTION_ERROR"):
+            return "PERMISSION_OR_SUBSCRIPTION_ERROR"
+        if err.startswith("CLIENT_METHOD_UNSUPPORTED"):
+            return "CLIENT_METHOD_UNSUPPORTED"
+    if diag.requests_error > 0 and diag.requests_empty + diag.requests_error >= diag.requests_attempted:
+        if diag.contracts_before_filter == 0:
+            return "API_SHAPE_MISMATCH"
+    if diag.contracts_before_filter > 0 and diag.contracts_after_filter == 0:
+        return "FILTER_REMOVED_ALL_ROWS"
+    if diag.requests_empty > 0 and diag.requests_attempted > 0 and diag.contracts_before_filter == 0:
+        return "EMPTY_FETCH_RESULT"
+    if diag.fetch_attempted and diag.contracts_staged == 0:
+        return "EMPTY_FETCH_RESULT"
+    return None
+
+
+def fetch_diagnostics_summary(diag: GreeksFetchDiagnostics) -> dict[str, object]:
+    return {
+        "requests_attempted": diag.requests_attempted,
+        "requests_empty": diag.requests_empty,
+        "requests_error": diag.requests_error,
+        "requests_invalid": diag.requests_invalid,
+        "contracts_before_filter": diag.contracts_before_filter,
+        "contracts_removed_by_filter": diag.contracts_removed_by_filter,
+        "contracts_after_filter": diag.contracts_after_filter,
+        "contracts_staged": diag.contracts_staged,
+        "failure_class": diag.failure_class,
+        "request_descriptors_sample": list(diag.request_descriptors),
+        "empty_response_reasons_sample": list(diag.empty_response_reasons),
+        "error_summaries_sample": list(diag.error_summaries),
+    }
 
 
 def load_blueprint_plan_from_csv(path: str | Path) -> list[AlpacaBlueprintReplayPlanRow]:
@@ -423,18 +555,88 @@ def fetch_alpaca_chain_snapshots(
     client: Any,
     plan: AlpacaBlueprintReplayPlanRow,
 ) -> dict[str, Any]:
+    result = _fetch_option_chain_attempt(client, plan)
+    return result.filtered_snapshots
+
+
+def _fetch_option_chain_attempt(client: Any, plan: AlpacaBlueprintReplayPlanRow) -> _FetchAttemptResult:
+    valid, reason = validate_blueprint_for_chain_request(plan)
+    if not valid:
+        return _FetchAttemptResult(
+            outcome="invalid",
+            contracts_before_filter=0,
+            contracts_after_filter=0,
+            filtered_snapshots={},
+            empty_reason=None,
+            error_summary=f"REQUEST_INVALID:{reason}",
+        )
     from alpaca.data.requests import OptionChainRequest
 
     exp_lo, exp_hi = _parse_expiration_window(plan.expiration_window)
     request = OptionChainRequest(
-        underlying_symbol=plan.symbol,
+        underlying_symbol=plan.symbol.strip().upper(),
         expiration_date_gte=exp_lo,
         expiration_date_lte=exp_hi,
     )
-    raw = client.get_option_chain(request)
+    try:
+        raw = client.get_option_chain(request)
+    except AttributeError as exc:
+        return _FetchAttemptResult(
+            outcome="error",
+            contracts_before_filter=0,
+            contracts_after_filter=0,
+            filtered_snapshots={},
+            empty_reason=None,
+            error_summary=f"CLIENT_METHOD_UNSUPPORTED:{type(exc).__name__}",
+        )
+    except Exception as exc:
+        failure = _classify_fetch_exception(exc)
+        return _FetchAttemptResult(
+            outcome="error",
+            contracts_before_filter=0,
+            contracts_after_filter=0,
+            filtered_snapshots={},
+            empty_reason=None,
+            error_summary=f"{failure}:{type(exc).__name__}",
+        )
     if not isinstance(raw, dict):
-        return {}
-    return _filter_chain_snapshots(raw, plan)
+        return _FetchAttemptResult(
+            outcome="error",
+            contracts_before_filter=0,
+            contracts_after_filter=0,
+            filtered_snapshots={},
+            empty_reason=None,
+            error_summary=f"API_SHAPE_MISMATCH:expected_dict_got_{type(raw).__name__}",
+        )
+    before = len(raw)
+    filtered = _filter_chain_snapshots(raw, plan)
+    after = len(filtered)
+    if before == 0:
+        return _FetchAttemptResult(
+            outcome="empty",
+            contracts_before_filter=0,
+            contracts_after_filter=0,
+            filtered_snapshots={},
+            empty_reason="alpaca_returned_zero_contracts",
+            error_summary=None,
+        )
+    if after == 0:
+        return _FetchAttemptResult(
+            outcome="empty",
+            contracts_before_filter=before,
+            contracts_after_filter=0,
+            filtered_snapshots={},
+            empty_reason="filter_removed_all_contracts",
+            error_summary=None,
+        )
+    return _FetchAttemptResult(
+        outcome="ok",
+        contracts_before_filter=before,
+        contracts_after_filter=after,
+        filtered_snapshots=filtered,
+        empty_reason=None,
+        error_summary=None,
+    )
 
 
 def stage_greeks_for_plans(
@@ -446,16 +648,47 @@ def stage_greeks_for_plans(
     allow_bs_fallback: bool,
     fallback_volatility_proxy: float | None,
     min_time_to_expiry_days: float | None,
-) -> tuple[list[AlpacaGreeksCandidateRow], bool]:
+) -> tuple[list[AlpacaGreeksCandidateRow], bool, GreeksFetchDiagnostics | None]:
     rows: list[AlpacaGreeksCandidateRow] = []
-    fetch_attempted = False
     if not fetch:
-        return rows, fetch_attempted
+        return rows, False, None
     if client is None:
-        return rows, fetch_attempted
-    fetch_attempted = True
+        return rows, False, None
+
+    descriptors: list[dict[str, object]] = []
+    empty_reasons: list[str] = []
+    error_summaries: list[str] = []
+    requests_attempted = 0
+    requests_empty = 0
+    requests_error = 0
+    requests_invalid = 0
+    contracts_before = 0
+    contracts_after = 0
+
     for plan in plans:
-        snapshots = fetch_alpaca_chain_snapshots(client, plan)
+        if len(descriptors) < 3:
+            descriptors.append(sanitize_blueprint_descriptor(plan))
+        attempt = _fetch_option_chain_attempt(client, plan)
+        if attempt.outcome == "invalid":
+            requests_invalid += 1
+            if attempt.error_summary and len(error_summaries) < 3:
+                error_summaries.append(attempt.error_summary)
+            continue
+        requests_attempted += 1
+        contracts_before += attempt.contracts_before_filter
+        contracts_after += attempt.contracts_after_filter
+        if attempt.outcome == "error":
+            requests_error += 1
+            if attempt.error_summary and len(error_summaries) < 3:
+                error_summaries.append(attempt.error_summary)
+            continue
+        if attempt.outcome == "empty":
+            requests_empty += 1
+            if attempt.empty_reason and len(empty_reasons) < 3:
+                tag = f"{plan.symbol}:{attempt.empty_reason}"
+                empty_reasons.append(tag)
+            continue
+        snapshots = attempt.filtered_snapshots
         for option_symbol, snap in sorted(snapshots.items()):
             try:
                 expiration, strike, option_type = parse_occ_us_option_contract(option_symbol)
@@ -475,7 +708,26 @@ def stage_greeks_for_plans(
                     min_time_to_expiry_days=min_time_to_expiry_days,
                 )
             )
-    return rows, fetch_attempted
+
+    diag = GreeksFetchDiagnostics(
+        fetch_attempted=True,
+        blueprint_rows=len(plans),
+        requests_attempted=requests_attempted,
+        requests_empty=requests_empty,
+        requests_error=requests_error,
+        requests_invalid=requests_invalid,
+        contracts_before_filter=contracts_before,
+        contracts_removed_by_filter=max(0, contracts_before - contracts_after),
+        contracts_after_filter=contracts_after,
+        contracts_staged=len(rows),
+        request_descriptors=tuple(descriptors[:3]),
+        empty_response_reasons=tuple(empty_reasons[:3]),
+        error_summaries=tuple(error_summaries[:3]),
+        failure_class=None,
+    )
+    failure = resolve_fetch_failure_class(diag)
+    diag = replace(diag, failure_class=failure)
+    return rows, True, diag
 
 
 def greeks_candidates_to_dataframe(rows: list[AlpacaGreeksCandidateRow]) -> pd.DataFrame:

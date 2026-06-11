@@ -65,6 +65,25 @@ PYTHONPATH=src python examples/alpaca_greeks_candidate_stage.py \
   --allow-bs-fallback
 ```
 
+### Fetch diagnostics (ALPACA-GREEKS-C1A)
+
+When `--fetch` is set, the layer counts chain requests attempted, empty API responses, errors, and contracts before/after strike filtering. Invalid blueprint rows are reported as `REQUEST_INVALID` (not silent zero). If all responses are empty, the failure class is `EMPTY_FETCH_RESULT`.
+
+```bash
+PYTHONPATH=src python examples/alpaca_greeks_candidate_stage.py \
+  --rebuild-if-missing \
+  --fetch \
+  --limit 5 \
+  --no-write \
+  --allow-bs-fallback \
+  --debug-requests \
+  --fail-on-empty-fetch
+```
+
+`--fail-on-empty-fetch` exits non-zero with a failure class when no contract rows are staged. `--debug-requests` prints the first three sanitized request descriptors and empty/error samples (no API keys).
+
+Replay blueprint `trade_date` values may be historical; live option chain snapshots reflect current listings, so empty fetches can be expected for past dates even when credentials are valid.
+
 ### Downstream CSV
 
 When fetch succeeds, rows may be written to:
