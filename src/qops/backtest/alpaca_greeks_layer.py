@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 from dataclasses import dataclass, fields
 from datetime import date, datetime
 from pathlib import Path
@@ -509,12 +510,103 @@ def summarize_greeks_staging(
     }
 
 
+CredentialStatus = Literal["READY", "MISSING"]
+
+
+@dataclass(frozen=True, slots=True)
+class AlpacaMarketDataCredentialCheck:
+    """Read-only market-data credential readiness (no secret values)."""
+
+    credential_status: CredentialStatus
+    env_pair_label: str | None
+    detail: str | None
+
+
+def load_local_env() -> None:
+    """Load `.env` when python-dotenv is available; never raises on permission errors."""
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    try:
+        load_dotenv()
+    except PermissionError:
+        pass
+
+
+def _env_nonempty(name: str) -> str | None:
+    raw = os.environ.get(name)
+    if raw is None:
+        return None
+    value = str(raw).strip()
+    return value if value else None
+
+
+def check_alpaca_market_data_credentials() -> AlpacaMarketDataCredentialCheck:
+    """
+    Detect one complete Alpaca market-data key pair (never logs values).
+
+    Supports ALPACA_API_KEY + ALPACA_SECRET_KEY or APCA_API_KEY_ID + APCA_API_SECRET_KEY.
+    """
+    pairs: tuple[tuple[str, str, str], ...] = (
+        ("ALPACA_API_KEY", "ALPACA_SECRET_KEY", "ALPACA_*"),
+        ("APCA_API_KEY_ID", "APCA_API_SECRET_KEY", "APCA_*"),
+    )
+    for key_name, secret_name, label in pairs:
+        key = _env_nonempty(key_name)
+        secret = _env_nonempty(secret_name)
+        if key and secret:
+            return AlpacaMarketDataCredentialCheck(
+                credential_status="READY",
+                env_pair_label=label,
+                detail=None,
+            )
+        if key or secret:
+            return AlpacaMarketDataCredentialCheck(
+                credential_status="MISSING",
+                env_pair_label=label,
+                detail="incomplete_credential_pair",
+            )
+    return AlpacaMarketDataCredentialCheck(
+        credential_status="MISSING",
+        env_pair_label=None,
+        detail="no_credential_pair",
+    )
+
+
+def resolve_market_data_api_keys() -> tuple[str, str] | None:
+    """Return (api_key, secret_key) for read-only market data when a full pair exists."""
+    pairs = (
+        ("ALPACA_API_KEY", "ALPACA_SECRET_KEY"),
+        ("APCA_API_KEY_ID", "APCA_API_SECRET_KEY"),
+    )
+    for key_name, secret_name in pairs:
+        key = _env_nonempty(key_name)
+        secret = _env_nonempty(secret_name)
+        if key and secret:
+            return key, secret
+    return None
+
+
 def try_create_option_client() -> tuple[Any | None, str | None]:
+    creds = check_alpaca_market_data_credentials()
+    if creds.credential_status != "READY":
+        detail = creds.detail or "missing_credentials"
+        return None, f"credential_error:{detail}"
     try:
         from alpaca.data.historical.option import OptionHistoricalDataClient
     except ImportError as exc:
         return None, f"import_error:{exc}"
+    keys = resolve_market_data_api_keys()
+    if keys is None:
+        return None, "credential_error:no_credential_pair"
+    api_key, secret_key = keys
     try:
-        return OptionHistoricalDataClient(raw_data=True), None
+        return (
+            OptionHistoricalDataClient(api_key=api_key, secret_key=secret_key, raw_data=True),
+            None,
+        )
     except ValueError as exc:
         return None, f"credential_error:{exc}"
+    except Exception as exc:
+        return None, f"client_error:{type(exc).__name__}"

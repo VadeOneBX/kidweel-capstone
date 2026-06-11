@@ -3,30 +3,25 @@
 
 Run:
   PYTHONPATH=src python examples/alpaca_greeks_candidate_stage.py --rebuild-if-missing --no-write --limit 10
+  PYTHONPATH=src python examples/alpaca_greeks_candidate_stage.py --env-check
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
-from dotenv import load_dotenv
-
 from qops.backtest.alpaca_greeks_layer import (
+    check_alpaca_market_data_credentials,
     greeks_candidates_to_dataframe,
     load_blueprint_request_plans,
+    load_local_env,
     stage_greeks_for_plans,
     summarize_greeks_staging,
     try_create_option_client,
 )
-
-
-def _safe_load_env() -> None:
-    try:
-        load_dotenv()
-    except PermissionError:
-        pass
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -50,6 +45,11 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--rebuild-if-missing", action="store_true")
     p.add_argument("--no-write", action="store_true")
     p.add_argument("--fetch", action="store_true", help="Read-only Alpaca option chain snapshot fetch")
+    p.add_argument(
+        "--env-check",
+        action="store_true",
+        help="Print credential_status only (loads .env when dotenv available); no fetch",
+    )
     p.add_argument("--limit", type=int, default=25)
     p.add_argument("--dte-min", type=int, default=0)
     p.add_argument("--dte-max", type=int, default=7)
@@ -79,6 +79,17 @@ def main(argv: list[str] | None = None) -> None:
     )
     ns = p.parse_args(argv)
 
+    if ns.env_check:
+        load_local_env()
+        check = check_alpaca_market_data_credentials()
+        print("Alpaca market-data credential check (read-only greeks layer)")
+        print("credential_status:", check.credential_status)
+        if check.env_pair_label:
+            print("env_pair_label:", check.env_pair_label)
+        if check.detail:
+            print("detail:", check.detail)
+        raise SystemExit(0 if check.credential_status == "READY" else 1)
+
     plans, plan_source = load_blueprint_request_plans(
         input_csv=ns.input,
         availability_csv=ns.availability,
@@ -94,8 +105,29 @@ def main(argv: list[str] | None = None) -> None:
     client = None
     client_error: str | None = None
     if ns.fetch:
-        _safe_load_env()
+        load_local_env()
+        creds = check_alpaca_market_data_credentials()
+        if creds.credential_status != "READY":
+            detail = creds.detail or "missing_credentials"
+            print("Alpaca greeks candidate staging (no approval, no execution)")
+            print("============================================================")
+            print(f"blueprint_plan_source: {plan_source}")
+            print(f"blueprint_input_rows: {len(plans)}")
+            print("fetch_requested: True")
+            print("fetch_attempted: False")
+            print(f"credential_status: {creds.credential_status}")
+            print(f"credential_error: {detail}")
+            raise SystemExit(1)
         client, client_error = try_create_option_client()
+        if client is None:
+            print("Alpaca greeks candidate staging (no approval, no execution)")
+            print("============================================================")
+            print(f"blueprint_plan_source: {plan_source}")
+            print(f"blueprint_input_rows: {len(plans)}")
+            print("fetch_requested: True")
+            print("fetch_attempted: False")
+            print(f"fetch_client: skipped ({client_error})")
+            raise SystemExit(1)
 
     candidates, fetch_attempted = stage_greeks_for_plans(
         plans,
