@@ -29,6 +29,7 @@ __all__ = [
     "build_structure_candidate",
     "evaluate_spread_math",
     "spread_math_allows_advance",
+    "generate_spread_candidates",
     "debit_spread_breakeven",
     "debit_spread_max_loss",
     "debit_spread_max_profit",
@@ -44,6 +45,7 @@ _LAZY_EXPORTS: dict[str, str] = {
     "evaluate_spread_math": "qops.strategy.spread_math",
     "select_expiry": "qops.strategy.expiry_selector",
     "spread_math_allows_advance": "qops.strategy.spread_math",
+    "generate_spread_candidates": "qops.strategy.spread_candidate_generator",
 }
 
 
