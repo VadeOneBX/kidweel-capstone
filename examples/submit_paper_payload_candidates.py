@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""Dry-run or explicit paper submit for PAPER_PAYLOAD_READY rows (MCP-C12A)."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+from qops.execution.alpaca_paper_bridge import (
+    CANONICAL_PAPER_BASE_URL,
+    check_alpaca_paper_credentials,
+    effective_transport_limit,
+    load_paper_payload_rows,
+    paper_transport_to_dataframe,
+    run_paper_payload_transport,
+    summarize_paper_transport,
+)
+
+
+def main(argv: list[str] | None = None) -> None:
+    p = argparse.ArgumentParser(description="Alpaca paper transport for payload candidates")
+    p.add_argument(
+        "--input",
+        type=Path,
+        default=Path("data/processed/paper_payload_candidates.csv"),
+    )
+    p.add_argument(
+        "--output",
+        type=Path,
+        default=Path("data/processed/paper_transport_results.csv"),
+    )
+    p.add_argument("--no-write", action="store_true")
+    p.add_argument("--limit", type=int, default=None)
+    p.add_argument("--env-check", action="store_true")
+    p.add_argument(
+        "--submit-paper",
+        action="store_true",
+        help="Submit to Alpaca paper (default is dry-run only)",
+    )
+    p.add_argument(
+        "--require-paper-endpoint",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    ns = p.parse_args(argv)
+
+    if ns.env_check:
+        check = check_alpaca_paper_credentials(require_paper_endpoint=ns.require_paper_endpoint)
+        print("Alpaca paper transport env check (MCP-C12A)")
+        print("===========================================")
+        print(f"credential_status: {check.credential_status}")
+        print(f"env_pair_label: {check.env_pair_label}")
+        print(f"base_url: {check.base_url}")
+        print(f"endpoint_ok: {check.endpoint_ok}")
+        print(f"endpoint_detail: {check.endpoint_detail}")
+        print(f"canonical_paper_url: {CANONICAL_PAPER_BASE_URL}")
+        if check.detail:
+            print(f"detail: {check.detail}")
+        if check.credential_status != "READY" or not check.endpoint_ok:
+            sys.exit(1)
+        return
+
+    rows = load_paper_payload_rows(ns.input)
+    if not rows:
+        print("Paper payload transport (MCP-C12A)")
+        print("==================================")
+        print(f"input_payload_candidates: 0 ({ns.input} missing or empty)")
+        print("note: run examples/build_paper_payload_candidates.py first")
+        return
+
+    limit = effective_transport_limit(submit_paper=ns.submit_paper, limit=ns.limit)
+    results, fatal = run_paper_payload_transport(
+        rows,
+        submit_paper=ns.submit_paper,
+        limit=limit,
+        require_paper_endpoint=ns.require_paper_endpoint,
+    )
+    summary = summarize_paper_transport(rows, results)
+
+    print("Paper payload transport (MCP-C12A)")
+    print("==================================")
+    print(f"input_payload_candidates: {summary['input_payload_candidates']}")
+    print(f"paper_payload_ready_count: {summary['paper_payload_ready_count']}")
+    print(f"dry_run_ready_count: {summary['dry_run_ready_count']}")
+    print(f"paper_submitted_count: {summary['paper_submitted_count']}")
+    print(f"submit_attempted: {ns.submit_paper}")
+    print(f"transport_limit: {limit}")
+    print(f"dry_run: {not ns.submit_paper}")
+
+    if fatal:
+        print(f"fatal_error: {fatal}")
+        sys.exit(1)
+
+    for r in results:
+        print(
+            json.dumps(
+                {
+                    "payload_id": r.payload_id,
+                    "symbol": r.symbol,
+                    "structure_type": r.structure_type,
+                    "transport_status": r.transport_status,
+                    "dry_run": r.dry_run,
+                    "message": r.message,
+                }
+            )
+        )
+
+    if not ns.no_write and results:
+        ns.output.parent.mkdir(parents=True, exist_ok=True)
+        paper_transport_to_dataframe(results).to_csv(ns.output, index=False)
+        print(f"wrote: {ns.output.resolve()}")
+    elif ns.no_write:
+        print("write: skipped (--no-write)")
+
+
+if __name__ == "__main__":
+    main()
