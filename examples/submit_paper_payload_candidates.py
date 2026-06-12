@@ -10,13 +10,48 @@ from pathlib import Path
 
 from qops.execution.alpaca_paper_bridge import (
     CANONICAL_PAPER_BASE_URL,
+    AuthMode,
     check_alpaca_paper_credentials,
+    check_alpaca_profile_cli_credentials,
     effective_transport_limit,
     load_paper_payload_rows,
     paper_transport_to_dataframe,
+    profile_cli_submit_blocked,
     run_paper_payload_transport,
     summarize_paper_transport,
 )
+
+
+def _print_env_triplet_check(*, require_paper_endpoint: bool) -> int:
+    check = check_alpaca_paper_credentials(require_paper_endpoint=require_paper_endpoint)
+    print("Alpaca paper transport env check (MCP-C12A)")
+    print("===========================================")
+    print("auth_mode: env_triplet")
+    print(f"credential_status: {check.credential_status}")
+    print(f"env_pair_label: {check.env_pair_label}")
+    print(f"base_url: {check.base_url}")
+    print(f"endpoint_ok: {check.endpoint_ok}")
+    print(f"endpoint_detail: {check.endpoint_detail}")
+    print(f"canonical_paper_url: {CANONICAL_PAPER_BASE_URL}")
+    if check.detail:
+        print(f"detail: {check.detail}")
+    if check.credential_status != "READY" or not check.endpoint_ok:
+        return 1
+    return 0
+
+
+def _print_profile_cli_check() -> int:
+    check = check_alpaca_profile_cli_credentials()
+    print("Alpaca paper transport env check (MCP-C12A-AUTH1)")
+    print("================================================")
+    print("auth_mode: profile_cli")
+    print(f"credential_status: {check.credential_status}")
+    print(f"cli_argv: {' '.join(check.cli_argv)}")
+    if check.detail:
+        print(f"detail: {check.detail}")
+    if check.credential_status != "READY":
+        return 1
+    return 0
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -35,6 +70,12 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--env-check", action="store_true")
     p.add_argument(
+        "--auth-mode",
+        choices=("env_triplet", "profile_cli"),
+        default="env_triplet",
+        help="env_triplet: ALPACA_PAPER_* vars; profile_cli: Alpaca CLI profile check (env-check only)",
+    )
+    p.add_argument(
         "--submit-paper",
         action="store_true",
         help="Submit to Alpaca paper (default is dry-run only)",
@@ -45,22 +86,22 @@ def main(argv: list[str] | None = None) -> None:
         default=True,
     )
     ns = p.parse_args(argv)
+    auth_mode: AuthMode = ns.auth_mode
 
     if ns.env_check:
-        check = check_alpaca_paper_credentials(require_paper_endpoint=ns.require_paper_endpoint)
-        print("Alpaca paper transport env check (MCP-C12A)")
-        print("===========================================")
-        print(f"credential_status: {check.credential_status}")
-        print(f"env_pair_label: {check.env_pair_label}")
-        print(f"base_url: {check.base_url}")
-        print(f"endpoint_ok: {check.endpoint_ok}")
-        print(f"endpoint_detail: {check.endpoint_detail}")
-        print(f"canonical_paper_url: {CANONICAL_PAPER_BASE_URL}")
-        if check.detail:
-            print(f"detail: {check.detail}")
-        if check.credential_status != "READY" or not check.endpoint_ok:
-            sys.exit(1)
-        return
+        code = (
+            _print_profile_cli_check()
+            if auth_mode == "profile_cli"
+            else _print_env_triplet_check(require_paper_endpoint=ns.require_paper_endpoint)
+        )
+        sys.exit(code)
+
+    blocked = profile_cli_submit_blocked(auth_mode, submit_paper=ns.submit_paper)
+    if blocked:
+        print("Paper payload transport (MCP-C12A)")
+        print("==================================")
+        print(f"fatal_error: {blocked}")
+        sys.exit(1)
 
     rows = load_paper_payload_rows(ns.input)
     if not rows:
@@ -81,6 +122,7 @@ def main(argv: list[str] | None = None) -> None:
 
     print("Paper payload transport (MCP-C12A)")
     print("==================================")
+    print(f"auth_mode: {auth_mode}")
     print(f"input_payload_candidates: {summary['input_payload_candidates']}")
     print(f"paper_payload_ready_count: {summary['paper_payload_ready_count']}")
     print(f"dry_run_ready_count: {summary['dry_run_ready_count']}")

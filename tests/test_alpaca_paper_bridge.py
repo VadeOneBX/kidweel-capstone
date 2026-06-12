@@ -2,19 +2,25 @@
 
 from __future__ import annotations
 
+import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from examples.submit_paper_payload_candidates import main as submit_main
 from qops.execution.alpaca_paper_bridge import (
     CANONICAL_PAPER_BASE_URL,
+    PROFILE_CLI_SUBMIT_NOT_IMPLEMENTED,
     AlpacaPaperCredentials,
     build_alpaca_mleg_order_request,
+    build_profile_cli_env_check_argv,
     deterministic_client_order_id,
     check_alpaca_paper_credentials,
+    check_alpaca_profile_cli_credentials,
     effective_transport_limit,
     filter_ready_payloads,
     normalize_paper_base_url,
+    profile_cli_submit_blocked,
     run_paper_payload_transport,
     submit_alpaca_paper_mleg_order,
     transport_error_raw,
@@ -220,3 +226,81 @@ def test_submit_alpaca_paper_mleg_order_maps_response(mock_client_cls: MagicMock
     call_kwargs = mock_client_cls.call_args.kwargs
     assert call_kwargs["paper"] is True
     assert call_kwargs["url_override"] == CANONICAL_PAPER_BASE_URL
+
+
+def test_auth_mode_defaults_to_env_triplet() -> None:
+    with patch("examples.submit_paper_payload_candidates._print_env_triplet_check", return_value=0):
+        with pytest.raises(SystemExit) as exc:
+            submit_main(["--env-check"])
+        assert exc.value.code == 0
+
+
+def test_profile_cli_argv_includes_quiet_not_live_or_secret() -> None:
+    argv = build_profile_cli_env_check_argv()
+    assert "--quiet" in argv
+    assert "--live" not in argv
+    assert "--secret" not in argv
+
+
+def test_profile_cli_env_check_does_not_submit() -> None:
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(cmd, 0, stdout='{"mode":"paper"}', stderr="")
+
+    with patch("qops.execution.alpaca_paper_bridge.shutil.which", return_value="/usr/bin/alpaca"):
+        with patch(
+            "qops.execution.alpaca_paper_bridge.submit_alpaca_paper_mleg_order",
+        ) as mocked_submit:
+            check = check_alpaca_profile_cli_credentials(run=fake_run)
+            mocked_submit.assert_not_called()
+    assert check.credential_status == "READY"
+
+
+def test_profile_cli_cli_not_found() -> None:
+    with patch("qops.execution.alpaca_paper_bridge.shutil.which", return_value=None):
+        check = check_alpaca_profile_cli_credentials()
+    assert check.credential_status == "CLI_NOT_FOUND"
+
+
+def test_profile_cli_exit_code_2_auth_failed() -> None:
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(cmd, 2, stdout="", stderr="auth")
+
+    with patch("qops.execution.alpaca_paper_bridge.shutil.which", return_value="/usr/bin/alpaca"):
+        check = check_alpaca_profile_cli_credentials(run=fake_run)
+    assert check.credential_status == "AUTH_FAILED"
+    assert check.detail == "alpaca_cli_exit_code_2"
+
+
+def test_profile_cli_submit_blocked() -> None:
+    assert profile_cli_submit_blocked("profile_cli", submit_paper=True) == PROFILE_CLI_SUBMIT_NOT_IMPLEMENTED
+    assert profile_cli_submit_blocked("env_triplet", submit_paper=True) is None
+
+
+def test_submit_paper_profile_cli_fails_closed() -> None:
+    with pytest.raises(SystemExit) as exc:
+        submit_main(["--submit-paper", "--auth-mode", "profile_cli"])
+    assert exc.value.code == 1
+
+
+def test_env_triplet_submit_path_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ALPACA_PAPER_API_KEY", "key")
+    monkeypatch.setenv("ALPACA_PAPER_SECRET_KEY", "secret")
+    monkeypatch.setenv("ALPACA_PAPER_BASE_URL", CANONICAL_PAPER_BASE_URL)
+
+    def fake_submit(_creds: AlpacaPaperCredentials, _payload: PaperPayloadCandidate) -> dict:
+        return {
+            "accepted": True,
+            "status": "accepted",
+            "broker_mode": "paper",
+            "external_order_id": "oid",
+            "message": "ok",
+        }
+
+    results, fatal = run_paper_payload_transport(
+        [_ready_payload()],
+        submit_paper=True,
+        limit=1,
+        submit_fn=fake_submit,
+    )
+    assert fatal is None
+    assert results[0].transport_status == "PAPER_SUBMITTED"

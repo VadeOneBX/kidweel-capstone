@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import math
 import os
+import shutil
+import subprocess
 from dataclasses import dataclass, fields
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Callable, Literal, Protocol
 
 import pandas as pd
 
@@ -17,6 +19,18 @@ from qops.schemas.playbook import AllowedPlaybook
 
 PROVENANCE_TAG = "mcp_c12a_alpaca_paper_bridge"
 CANONICAL_PAPER_BASE_URL = "https://paper-api.alpaca.markets"
+PROFILE_CLI_SUBMIT_NOT_IMPLEMENTED = "PROFILE_CLI_SUBMIT_NOT_IMPLEMENTED"
+
+AuthMode = Literal["env_triplet", "profile_cli"]
+ProfileCliCredentialStatus = Literal[
+    "READY",
+    "MISSING",
+    "CLI_NOT_FOUND",
+    "AUTH_FAILED",
+    "UNKNOWN",
+]
+
+_FORBIDDEN_ALPACA_CLI_FLAGS = frozenset({"--secret", "--live"})
 
 TransportStatus = Literal[
     "PAPER_DRY_RUN_READY",
@@ -69,6 +83,14 @@ def validate_paper_endpoint(
 
 
 @dataclass(frozen=True, slots=True)
+class AlpacaProfileCliCredentialCheck:
+    credential_status: ProfileCliCredentialStatus
+    auth_mode: AuthMode
+    detail: str | None
+    cli_argv: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class AlpacaPaperCredentialCheck:
     credential_status: Literal["READY", "MISSING"]
     env_pair_label: str | None
@@ -110,6 +132,109 @@ class PaperMlegSubmitFn(Protocol):
         credentials: AlpacaPaperCredentials,
         payload: PaperPayloadCandidate,
     ) -> dict: ...
+
+
+def build_profile_cli_env_check_argv(*, executable: str = "alpaca") -> list[str]:
+    """Read-only Alpaca CLI profile check (automation: always includes --quiet)."""
+    return [executable, "profile", "show", "--quiet"]
+
+
+def assert_no_forbidden_alpaca_cli_flags(argv: list[str]) -> None:
+    for token in argv:
+        if token in _FORBIDDEN_ALPACA_CLI_FLAGS or token.startswith("--secret="):
+            raise ValueError(f"forbidden_alpaca_cli_flag:{token}")
+
+
+def _interpret_profile_cli_stdout(stdout: str) -> tuple[ProfileCliCredentialStatus, str]:
+    text = stdout.strip().lower()
+    if not text:
+        return "UNKNOWN", "empty_profile_cli_output"
+    if "https://api.alpaca.markets" in text and CANONICAL_PAPER_BASE_URL not in text:
+        return "AUTH_FAILED", "live_endpoint_in_profile"
+    if (
+        "paper" in text
+        or CANONICAL_PAPER_BASE_URL in text
+        or "paper-api" in text
+        or '"paper":true' in text.replace(" ", "")
+        or "trading_mode: paper" in text
+        or "mode: paper" in text
+    ):
+        return "READY", "profile_paper_mode_detected"
+    if "live" in text and "paper" not in text:
+        return "AUTH_FAILED", "profile_not_paper_mode"
+    return "UNKNOWN", "paper_mode_not_verified"
+
+
+def check_alpaca_profile_cli_credentials(
+    *,
+    executable: str = "alpaca",
+    run: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+) -> AlpacaProfileCliCredentialCheck:
+    """Read-only Alpaca CLI profile readiness (no order submit, no --secret, no --live)."""
+    argv = build_profile_cli_env_check_argv(executable=executable)
+    assert_no_forbidden_alpaca_cli_flags(argv)
+    cli_tuple = tuple(argv)
+
+    if shutil.which(executable) is None:
+        return AlpacaProfileCliCredentialCheck(
+            credential_status="CLI_NOT_FOUND",
+            auth_mode="profile_cli",
+            detail="alpaca_cli_not_on_path",
+            cli_argv=cli_tuple,
+        )
+
+    runner = run if run is not None else subprocess.run
+    try:
+        proc = runner(
+            argv,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except FileNotFoundError:
+        return AlpacaProfileCliCredentialCheck(
+            credential_status="CLI_NOT_FOUND",
+            auth_mode="profile_cli",
+            detail="alpaca_cli_not_found",
+            cli_argv=cli_tuple,
+        )
+    except subprocess.TimeoutExpired:
+        return AlpacaProfileCliCredentialCheck(
+            credential_status="UNKNOWN",
+            auth_mode="profile_cli",
+            detail="profile_cli_timeout",
+            cli_argv=cli_tuple,
+        )
+
+    if proc.returncode == 2:
+        return AlpacaProfileCliCredentialCheck(
+            credential_status="AUTH_FAILED",
+            auth_mode="profile_cli",
+            detail="alpaca_cli_exit_code_2",
+            cli_argv=cli_tuple,
+        )
+    if proc.returncode != 0:
+        return AlpacaProfileCliCredentialCheck(
+            credential_status="AUTH_FAILED",
+            auth_mode="profile_cli",
+            detail=f"alpaca_cli_exit_code_{proc.returncode}",
+            cli_argv=cli_tuple,
+        )
+
+    status, detail = _interpret_profile_cli_stdout(proc.stdout or "")
+    return AlpacaProfileCliCredentialCheck(
+        credential_status=status,
+        auth_mode="profile_cli",
+        detail=detail,
+        cli_argv=cli_tuple,
+    )
+
+
+def profile_cli_submit_blocked(auth_mode: AuthMode, *, submit_paper: bool) -> str | None:
+    if submit_paper and auth_mode == "profile_cli":
+        return PROFILE_CLI_SUBMIT_NOT_IMPLEMENTED
+    return None
 
 
 def check_alpaca_paper_credentials(

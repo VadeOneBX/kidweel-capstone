@@ -11,13 +11,35 @@ No approval, strategy, sizing, or MCP judgment in this layer.
 - Input: `data/processed/paper_payload_candidates.csv`
 - Output: `data/processed/paper_transport_results.csv`
 
+## Authentication modes (`--auth-mode`)
+
+| Mode | `--env-check` | `--submit-paper` |
+|------|---------------|------------------|
+| **`env_triplet`** (default) | Requires `ALPACA_PAPER_*` triplet + canonical paper URL | **Supported** (only submit path today) |
+| **`profile_cli`** | Read-only `alpaca profile show --quiet` | **Not implemented** — fails closed with `PROFILE_CLI_SUBMIT_NOT_IMPLEMENTED` |
+
+`profile_cli` is for confirming local Alpaca CLI paper profile readiness when `ALPACA_PAPER_*` is not set. It does not submit orders or call order endpoints.
+
+Profile CLI rules:
+
+- Always pass **`--quiet`** on Alpaca CLI invocations from automation (repo env-check does).
+- **Never** pass **`--secret`** or **`--live`**.
+- Alpaca CLI **exit code 2** = authentication failure — fix credentials; do not retry blindly.
+- Submit still requires explicit **`--submit-paper`** and a supported auth path (`env_triplet` only for now).
+
+```bash
+PYTHONPATH=src python examples/submit_paper_payload_candidates.py \
+  --auth-mode profile_cli \
+  --env-check
+```
+
 ## Environment (paper transport only)
 
 Prefer **`ALPACA_PAPER_*`** (not market-data `ALPACA_API_KEY` / greeks credentials):
 
 | Variable | Required |
 |----------|----------|
-| `ALPACA_PAPER_API_KEY` | Yes (submit + env-check) |
+| `ALPACA_PAPER_API_KEY` | Yes (`env_triplet` submit + env-check) |
 | `ALPACA_PAPER_SECRET_KEY` | Yes |
 | `ALPACA_PAPER_BASE_URL` | Yes — must be exactly `https://paper-api.alpaca.markets` |
 
