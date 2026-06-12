@@ -24,6 +24,8 @@ This packet does **not** generate trades, execution payloads, or PnL. It does **
 
 **Greeks staging:** Historical replay blueprint rows (past `trade_date` / expiration windows) are for planning and Databento follow-up. To populate **current** option chains for paper candidate generation, use `examples/alpaca_greeks_candidate_stage.py --paper-live` (see `docs/alpaca-greeks-layer.md`).
 
+**Notebook alignment:** The Alpaca bull call spread tutorial notebook ([examples/options-bull-call-spread.ipynb](../examples/options-bull-call-spread.ipynb)) is a **shape reference** for chain filter → greeks → pairing; Kidweel DTE/strike defaults and rejected unsafe patterns are in [notebook-alignment.md](./notebook-alignment.md).
+
 ## Upstream
 
 SG-BT-C3 produces `alpaca_replay_input_plan.csv` with `READY_FOR_FETCH` rows when symbol, trade date, `current_price`, and SPY context are present.

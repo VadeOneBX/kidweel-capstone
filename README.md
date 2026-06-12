@@ -94,6 +94,8 @@ Claude proposes; the system decides.
 
 Transport executes; it does not decide.
 
+Paper-live candidate shape vs the Alpaca bull call notebook: [docs/notebook-alignment.md](./docs/notebook-alignment.md).
+
 ---
 
 ## Backtest evidence

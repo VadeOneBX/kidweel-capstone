@@ -47,10 +47,14 @@ PYTHONPATH=src python examples/alpaca_greeks_candidate_stage.py \
 
 **0DTE is not required**; DTE window remains configurable. **Databento** stays the precision reserve for historical replay, not the default here. **No execution** occurs in this layer.
 
+**Notebook reference:** Alpaca bull call article notebook ([examples/options-bull-call-spread.ipynb](../examples/options-bull-call-spread.ipynb)) uses a **21–60 DTE** example band; Kidweel paper-live defaults (**0–14**) and parameter mapping are documented in [notebook-alignment.md](./notebook-alignment.md) and `src/qops/config/paper_live_params.py`. The notebook window is **not mandatory**.
+
 ## Upstream
 
 - Input: `data/processed/alpaca_blueprint_replay_plan.csv`, or rebuild via C4A (`--rebuild-if-missing`).
 - SpotGamma → C3 availability → C4A blueprint strike/DTE window.
+
+**Safety:** This layer uses **market-data** keys only. Paper **order transport** uses separate `ALPACA_PAPER_*` variables (see [alpaca-paper-bridge.md](./alpaca-paper-bridge.md)). Do not reuse greeks credentials for submit.
 
 ## Read-only Alpaca market data setup
 
