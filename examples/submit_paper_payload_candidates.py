@@ -42,14 +42,18 @@ def _print_env_triplet_check(*, require_paper_endpoint: bool) -> int:
 
 def _print_profile_cli_check() -> int:
     check = check_alpaca_profile_cli_credentials()
-    print("Alpaca paper transport env check (MCP-C12A-AUTH1)")
+    print("Alpaca paper transport env check (MCP-C12A-AUTH2)")
     print("================================================")
     print("auth_mode: profile_cli")
     print(f"credential_status: {check.credential_status}")
     print(f"cli_argv: {' '.join(check.cli_argv)}")
+    print(f"account_check_argv: {' '.join(check.account_check_argv)}")
+    print(f"config_dir_source: {check.config_dir_source}")
+    print(f"profile_source: {check.profile_source}")
+    print(f"live_env_status: {check.live_env_status}")
     if check.detail:
         print(f"detail: {check.detail}")
-    if check.credential_status != "READY":
+    if check.credential_status != "READY_PROFILE_AUTH_PAPER_DEFAULT":
         return 1
     return 0
 

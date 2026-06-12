@@ -16,9 +16,17 @@ No approval, strategy, sizing, or MCP judgment in this layer.
 | Mode | `--env-check` | `--submit-paper` |
 |------|---------------|------------------|
 | **`env_triplet`** (default) | Requires `ALPACA_PAPER_*` triplet + canonical paper URL | **Supported** (only submit path today) |
-| **`profile_cli`** | Read-only `alpaca profile show --quiet` | **Not implemented** — fails closed with `PROFILE_CLI_SUBMIT_NOT_IMPLEMENTED` |
+| **`profile_cli`** | Read-only `alpaca profile show --quiet` + `alpaca account get --quiet` | **Not implemented** — fails closed with `PROFILE_CLI_SUBMIT_NOT_IMPLEMENTED` |
 
 `profile_cli` is for confirming local Alpaca CLI paper profile readiness when `ALPACA_PAPER_*` is not set. It does not submit orders or call order endpoints.
+
+Alpaca CLI stores profiles **outside the repo** (typically `~/.config/alpaca/profiles/`). Optional environment:
+
+- **`ALPACA_CONFIG_DIR`** — alternate config directory (passed through to CLI subprocess; never read or printed by this repo).
+- **`ALPACA_PROFILE`** — active profile name (passed through to CLI subprocess).
+- **`ALPACA_LIVE_TRADE=true`** (or `1` / `yes`) — **forbidden** for this repo (`LIVE_ENV_FORBIDDEN`).
+
+Paper is the Alpaca CLI default; live keys require explicit `--live` at login (never used here). If paper secrets are missing locally, regenerate paper API credentials in Alpaca and store them only in local profile/config — not in git.
 
 Profile CLI rules:
 

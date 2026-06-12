@@ -22,9 +22,12 @@ CANONICAL_PAPER_BASE_URL = "https://paper-api.alpaca.markets"
 PROFILE_CLI_SUBMIT_NOT_IMPLEMENTED = "PROFILE_CLI_SUBMIT_NOT_IMPLEMENTED"
 
 AuthMode = Literal["env_triplet", "profile_cli"]
+ConfigSource = Literal["env", "default", "unknown"]
 ProfileCliCredentialStatus = Literal[
-    "READY",
-    "MISSING",
+    "READY_PROFILE_AUTH_PAPER_DEFAULT",
+    "LIVE_ENV_FORBIDDEN",
+    "PROFILE_UNREADABLE",
+    "ACCOUNT_CHECK_FAILED",
     "CLI_NOT_FOUND",
     "AUTH_FAILED",
     "UNKNOWN",
@@ -88,6 +91,10 @@ class AlpacaProfileCliCredentialCheck:
     auth_mode: AuthMode
     detail: str | None
     cli_argv: tuple[str, ...]
+    account_check_argv: tuple[str, ...]
+    config_dir_source: ConfigSource
+    profile_source: ConfigSource
+    live_env_status: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,30 +146,64 @@ def build_profile_cli_env_check_argv(*, executable: str = "alpaca") -> list[str]
     return [executable, "profile", "show", "--quiet"]
 
 
+def build_profile_cli_account_check_argv(*, executable: str = "alpaca") -> list[str]:
+    """Read-only Alpaca CLI account check (automation: always includes --quiet)."""
+    return [executable, "account", "get", "--quiet"]
+
+
 def assert_no_forbidden_alpaca_cli_flags(argv: list[str]) -> None:
     for token in argv:
         if token in _FORBIDDEN_ALPACA_CLI_FLAGS or token.startswith("--secret="):
             raise ValueError(f"forbidden_alpaca_cli_flag:{token}")
 
 
-def _interpret_profile_cli_stdout(stdout: str) -> tuple[ProfileCliCredentialStatus, str]:
-    text = stdout.strip().lower()
-    if not text:
-        return "UNKNOWN", "empty_profile_cli_output"
-    if "https://api.alpaca.markets" in text and CANONICAL_PAPER_BASE_URL not in text:
-        return "AUTH_FAILED", "live_endpoint_in_profile"
-    if (
-        "paper" in text
-        or CANONICAL_PAPER_BASE_URL in text
-        or "paper-api" in text
-        or '"paper":true' in text.replace(" ", "")
-        or "trading_mode: paper" in text
-        or "mode: paper" in text
-    ):
-        return "READY", "profile_paper_mode_detected"
-    if "live" in text and "paper" not in text:
-        return "AUTH_FAILED", "profile_not_paper_mode"
-    return "UNKNOWN", "paper_mode_not_verified"
+def _live_trade_env_forbidden() -> bool:
+    raw = os.environ.get("ALPACA_LIVE_TRADE")
+    if raw is None:
+        return False
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _live_env_status() -> str:
+    if os.environ.get("ALPACA_LIVE_TRADE") is None:
+        return "missing"
+    if _live_trade_env_forbidden():
+        return "true"
+    return "false"
+
+
+def _config_dir_source() -> ConfigSource:
+    if _env_nonempty("ALPACA_CONFIG_DIR"):
+        return "env"
+    return "default"
+
+
+def _profile_name_source() -> ConfigSource:
+    if _env_nonempty("ALPACA_PROFILE"):
+        return "env"
+    return "default"
+
+
+def _profile_cli_check_result(
+    *,
+    credential_status: ProfileCliCredentialStatus,
+    detail: str | None,
+    cli_argv: tuple[str, ...],
+    account_check_argv: tuple[str, ...],
+    config_dir_source: ConfigSource,
+    profile_source: ConfigSource,
+    live_env_status: str,
+) -> AlpacaProfileCliCredentialCheck:
+    return AlpacaProfileCliCredentialCheck(
+        credential_status=credential_status,
+        auth_mode="profile_cli",
+        detail=detail,
+        cli_argv=cli_argv,
+        account_check_argv=account_check_argv,
+        config_dir_source=config_dir_source,
+        profile_source=profile_source,
+        live_env_status=live_env_status,
+    )
 
 
 def check_alpaca_profile_cli_credentials(
@@ -170,65 +211,73 @@ def check_alpaca_profile_cli_credentials(
     executable: str = "alpaca",
     run: Callable[..., subprocess.CompletedProcess[str]] | None = None,
 ) -> AlpacaProfileCliCredentialCheck:
-    """Read-only Alpaca CLI profile readiness (no order submit, no --secret, no --live)."""
-    argv = build_profile_cli_env_check_argv(executable=executable)
-    assert_no_forbidden_alpaca_cli_flags(argv)
-    cli_tuple = tuple(argv)
+    """Read-only Alpaca CLI profile + account readiness (no secrets printed, no submit)."""
+    profile_argv = build_profile_cli_env_check_argv(executable=executable)
+    account_argv = build_profile_cli_account_check_argv(executable=executable)
+    assert_no_forbidden_alpaca_cli_flags(profile_argv)
+    assert_no_forbidden_alpaca_cli_flags(account_argv)
+    cli_tuple = tuple(profile_argv)
+    account_tuple = tuple(account_argv)
+    config_src = _config_dir_source()
+    profile_src = _profile_name_source()
+    live_status = _live_env_status()
 
-    if shutil.which(executable) is None:
-        return AlpacaProfileCliCredentialCheck(
-            credential_status="CLI_NOT_FOUND",
-            auth_mode="profile_cli",
-            detail="alpaca_cli_not_on_path",
+    def result(
+        credential_status: ProfileCliCredentialStatus,
+        detail: str | None,
+    ) -> AlpacaProfileCliCredentialCheck:
+        return _profile_cli_check_result(
+            credential_status=credential_status,
+            detail=detail,
             cli_argv=cli_tuple,
+            account_check_argv=account_tuple,
+            config_dir_source=config_src,
+            profile_source=profile_src,
+            live_env_status=live_status,
         )
 
+    if _live_trade_env_forbidden():
+        return result("LIVE_ENV_FORBIDDEN", "ALPACA_LIVE_TRADE_true")
+
+    if shutil.which(executable) is None:
+        return result("CLI_NOT_FOUND", "alpaca_cli_not_on_path")
+
     runner = run if run is not None else subprocess.run
-    try:
-        proc = runner(
+    cli_env = os.environ.copy()
+
+    def run_cmd(argv: list[str]) -> subprocess.CompletedProcess[str]:
+        return runner(
             argv,
             capture_output=True,
             text=True,
             timeout=30,
             check=False,
+            env=cli_env,
         )
+
+    try:
+        profile_proc = run_cmd(profile_argv)
     except FileNotFoundError:
-        return AlpacaProfileCliCredentialCheck(
-            credential_status="CLI_NOT_FOUND",
-            auth_mode="profile_cli",
-            detail="alpaca_cli_not_found",
-            cli_argv=cli_tuple,
-        )
+        return result("CLI_NOT_FOUND", "alpaca_cli_not_found")
     except subprocess.TimeoutExpired:
-        return AlpacaProfileCliCredentialCheck(
-            credential_status="UNKNOWN",
-            auth_mode="profile_cli",
-            detail="profile_cli_timeout",
-            cli_argv=cli_tuple,
-        )
+        return result("UNKNOWN", "profile_cli_timeout")
 
-    if proc.returncode == 2:
-        return AlpacaProfileCliCredentialCheck(
-            credential_status="AUTH_FAILED",
-            auth_mode="profile_cli",
-            detail="alpaca_cli_exit_code_2",
-            cli_argv=cli_tuple,
-        )
-    if proc.returncode != 0:
-        return AlpacaProfileCliCredentialCheck(
-            credential_status="AUTH_FAILED",
-            auth_mode="profile_cli",
-            detail=f"alpaca_cli_exit_code_{proc.returncode}",
-            cli_argv=cli_tuple,
-        )
+    if profile_proc.returncode == 2:
+        return result("AUTH_FAILED", "alpaca_cli_profile_exit_code_2")
+    if profile_proc.returncode != 0:
+        return result("PROFILE_UNREADABLE", f"profile_show_exit_code_{profile_proc.returncode}")
 
-    status, detail = _interpret_profile_cli_stdout(proc.stdout or "")
-    return AlpacaProfileCliCredentialCheck(
-        credential_status=status,
-        auth_mode="profile_cli",
-        detail=detail,
-        cli_argv=cli_tuple,
-    )
+    try:
+        account_proc = run_cmd(account_argv)
+    except subprocess.TimeoutExpired:
+        return result("UNKNOWN", "account_check_timeout")
+
+    if account_proc.returncode == 2:
+        return result("AUTH_FAILED", "alpaca_cli_account_exit_code_2")
+    if account_proc.returncode != 0:
+        return result("ACCOUNT_CHECK_FAILED", f"account_get_exit_code_{account_proc.returncode}")
+
+    return result("READY_PROFILE_AUTH_PAPER_DEFAULT", "profile_and_account_ok")
 
 
 def profile_cli_submit_blocked(auth_mode: AuthMode, *, submit_paper: bool) -> str | None:

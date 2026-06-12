@@ -13,6 +13,7 @@ from qops.execution.alpaca_paper_bridge import (
     PROFILE_CLI_SUBMIT_NOT_IMPLEMENTED,
     AlpacaPaperCredentials,
     build_alpaca_mleg_order_request,
+    build_profile_cli_account_check_argv,
     build_profile_cli_env_check_argv,
     deterministic_client_order_id,
     check_alpaca_paper_credentials,
@@ -236,23 +237,49 @@ def test_auth_mode_defaults_to_env_triplet() -> None:
 
 
 def test_profile_cli_argv_includes_quiet_not_live_or_secret() -> None:
-    argv = build_profile_cli_env_check_argv()
-    assert "--quiet" in argv
-    assert "--live" not in argv
-    assert "--secret" not in argv
+    for argv in (build_profile_cli_env_check_argv(), build_profile_cli_account_check_argv()):
+        assert "--quiet" in argv
+        assert "--live" not in argv
+        assert "--secret" not in argv
 
 
-def test_profile_cli_env_check_does_not_submit() -> None:
-    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        return subprocess.CompletedProcess(cmd, 0, stdout='{"mode":"paper"}', stderr="")
+def _fake_cli_run_both_ok(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(cmd, 0, stdout="{}", stderr="")
 
+
+def test_profile_cli_ready_when_profile_and_account_ok(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ALPACA_LIVE_TRADE", raising=False)
     with patch("qops.execution.alpaca_paper_bridge.shutil.which", return_value="/usr/bin/alpaca"):
         with patch(
             "qops.execution.alpaca_paper_bridge.submit_alpaca_paper_mleg_order",
         ) as mocked_submit:
-            check = check_alpaca_profile_cli_credentials(run=fake_run)
+            check = check_alpaca_profile_cli_credentials(run=_fake_cli_run_both_ok)
             mocked_submit.assert_not_called()
-    assert check.credential_status == "READY"
+    assert check.credential_status == "READY_PROFILE_AUTH_PAPER_DEFAULT"
+    assert check.live_env_status == "missing"
+
+
+def test_profile_cli_live_env_forbidden(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ALPACA_LIVE_TRADE", "true")
+    with patch("qops.execution.alpaca_paper_bridge.shutil.which", return_value="/usr/bin/alpaca"):
+        with patch("qops.execution.alpaca_paper_bridge.subprocess.run") as mocked_run:
+            check = check_alpaca_profile_cli_credentials()
+            mocked_run.assert_not_called()
+    assert check.credential_status == "LIVE_ENV_FORBIDDEN"
+    assert check.live_env_status == "true"
+
+
+def test_profile_cli_account_check_failed() -> None:
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if "account" in cmd:
+            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="err")
+        return subprocess.CompletedProcess(cmd, 0, stdout="{}", stderr="")
+
+    with patch("qops.execution.alpaca_paper_bridge.shutil.which", return_value="/usr/bin/alpaca"):
+        check = check_alpaca_profile_cli_credentials(run=fake_run)
+    assert check.credential_status == "ACCOUNT_CHECK_FAILED"
 
 
 def test_profile_cli_cli_not_found() -> None:
@@ -268,7 +295,7 @@ def test_profile_cli_exit_code_2_auth_failed() -> None:
     with patch("qops.execution.alpaca_paper_bridge.shutil.which", return_value="/usr/bin/alpaca"):
         check = check_alpaca_profile_cli_credentials(run=fake_run)
     assert check.credential_status == "AUTH_FAILED"
-    assert check.detail == "alpaca_cli_exit_code_2"
+    assert check.detail == "alpaca_cli_profile_exit_code_2"
 
 
 def test_profile_cli_submit_blocked() -> None:
