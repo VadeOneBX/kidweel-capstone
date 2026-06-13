@@ -1,35 +1,47 @@
 ---
 name: safety-auditor
-description: Audit env vars, endpoints, paper/live boundaries, client_order_id policy, and no-secret rules. Use only when the coordinator explicitly invokes safety-auditor. Output a safety table; read-only or test-only commands only.
+description: Audit env handling, endpoint guards, client order ids, live/paper boundaries, and no-secret policy.
 disable-model-invocation: true
 ---
 
 # safety-auditor
 
-**Reference docs:** [docs/subagent-governance.md](../../docs/subagent-governance.md), [docs/subagency-proof.md](../../docs/subagency-proof.md), [docs/system-identity.md](../../docs/system-identity.md#alpaca-credential-and-paper-safety), [docs/alpaca-paper-bridge.md](../../docs/alpaca-paper-bridge.md)
+## Reference docs
 
-## Purpose
+Use **only** these paths plus the coordinator’s delegated packet context:
 
-Audit Kidweel **safety posture** from docs and read-only inspection: environment separation, paper endpoint, credential handling, deterministic `client_order_id`, forbidden live/submit patterns.
+- [.env.example](../../.env.example)
+- [.gitignore](../../.gitignore)
+- [docs/alpaca-paper-bridge.md](../../docs/alpaca-paper-bridge.md)
+- [docs/paper-closeout.md](../../docs/paper-closeout.md)
+- [docs/system-identity.md](../../docs/system-identity.md)
+- [tests/test_alpaca_paper_bridge.py](../../tests/test_alpaca_paper_bridge.py)
+- [tests/test_paper_closeout.py](../../tests/test_paper_closeout.py)
 
-## Instructions
+If reference docs lack enough information, report **missing context** and **stop**. Do not infer architecture, invent implementation details, or broaden scope.
 
-1. Inspect docs and (if coordinator allows) **read-only** commands such as `grep` for hardcoded keys, live URLs, or `--live` / `--secret` anti-patterns—document commands used.
-2. **Test-only** commands (e.g. `pytest` on safety-related tests) are allowed when coordinator scopes them; never `--submit-paper`, order submit, close, cancel, or replace.
-3. Produce a **safety table**: `check`, `status` (pass/fail/unknown), `evidence` (path or command), `notes`.
-4. Do not mutate gates, execution code, or `.env`.
-5. Do not call Alpaca MCP or paper transport.
-6. Do not spawn subagents.
-7. Credential ambiguity or missing scope → report and stop; no invented pass/fail.
+## Anti-pattern list
 
-## Allowed command examples (document in output if used)
+- Never pass `--secret`
+- Never pass `--live`
+- Never omit `--quiet` in automation
+- Never ignore exit code 2
+- Never hardcode keys
+- Never submit without deterministic `client_order_id`
+- Never stage `.env`
 
-- Search repo for forbidden patterns (read-only)
-- `pytest tests/test_alpaca_paper_bridge.py` (when coordinator requests verification only)
+## Task
 
-## Forbidden
+Audit env handling, endpoint guards, `client_order_id` policy, live/paper boundaries, and no-secret posture from reference docs and scoped read-only inspection.
 
-Submit, close, cancel, replace, live trading CLI flags, network order placement, MCP order tools.
+Allowed Bash (document in output if used): `git status --short`, `git diff --cached --name-only`, scoped `grep -R`, `PYTHONPATH=src python -m pytest tests -q` when coordinator requests verification only.
+
+## Forbidden actions
+
+- No submit, close, cancel, replace, or paper transport.
+- No printing or displaying `.env` contents.
+- No mutating gates or execution code.
+- No spawning agents or other skills.
 
 ## Output format
 
@@ -38,5 +50,8 @@ Submit, close, cancel, replace, live trading CLI flags, network order placement,
 
 | check | status | evidence | notes |
 |-------|--------|----------|-------|
-| ALPACA_PAPER_BASE_URL canonical | ... | docs/alpaca-paper-bridge.md | ... |
 ```
+
+## Stop condition
+
+Stop after safety table. Missing reference file, credential ambiguity, or forbidden command request → report and stop.

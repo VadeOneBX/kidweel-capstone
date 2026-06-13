@@ -2,7 +2,16 @@
 
 How the **claude-advisor** skill fits Kidweel: the only **interpretive** project skill in [SUBAGENCY-PROOF-C1](./subagency-proof.md).
 
-**Reference docs for this skill:** [subagent-governance.md](./subagent-governance.md), [claude-overlay.md](./claude-overlay.md), [system-identity.md](./system-identity.md), this file.
+**Reference docs for this skill:** See [subagency-proof.md — Skill reference map](./subagency-proof.md#skill-reference-map) and [CLAUDE.md](../CLAUDE.md). Advisory stubs: [advisory-group-layer.md](./advisory-group-layer.md), [advisory-group-matrix.md](./advisory-group-matrix.md), [sg-advisory-model.md](./sg-advisory-model.md).
+
+- `docs/claude-advisor-context.md` (this file)
+- `docs/system-identity.md`
+- `docs/spread-candidate-generation.md`
+- `docs/paper-approval-candidates.md`
+- `docs/paper-closeout.md`
+- **Supplied live/context data** (coordinator packet only)
+
+The skill may only use these docs plus delegated packet context. Insufficient information → report missing context and stop. Do not infer architecture, invent implementation details, or broaden scope.
 
 ---
 
@@ -77,6 +86,6 @@ The coordinator should attach:
 
 1. Paths or paste of context data to interpret  
 2. Question or decision surface (e.g. “flag only”, “memo + ADVISORY_*”)  
-3. Explicit list of reference docs (defaults above)
+3. Explicit reference docs per [subagency-proof.md](./subagency-proof.md#skill-reference-map) (defaults listed in [claude-advisor-context.md](./claude-advisor-context.md))
 
 Without (1), the skill reports missing data and stops.

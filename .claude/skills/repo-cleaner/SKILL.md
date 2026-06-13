@@ -1,33 +1,52 @@
 ---
 name: repo-cleaner
-description: Classify repo paths as files, helpers, tests, or docs. Use only when the coordinator explicitly invokes repo-cleaner. Output a classification table; no edits unless separately asked.
+description: Classify repository helpers, tests, docs, and scripts into canonical, legacy, experimental, archive, or delete-candidate groups.
 disable-model-invocation: true
 ---
 
 # repo-cleaner
 
-**Reference docs:** [docs/subagent-governance.md](../../docs/subagent-governance.md), [docs/subagency-proof.md](../../docs/subagency-proof.md), [.cursor/rules/capstone-repo.mdc](../../.cursor/rules/capstone-repo.mdc)
+## Reference docs
 
-## Purpose
+Use **only** these paths plus the coordinator’s delegated packet context:
 
-Classify repository paths (or a coordinator-supplied list) into: **source**, **helpers/utilities**, **tests**, **docs**, **config**, **other**. Support bounded review—not refactoring.
+- [README.md](../../README.md)
+- [docs/notebook-alignment.md](../../docs/notebook-alignment.md)
+- [docs/system-identity.md](../../docs/system-identity.md)
+- [docs/alpaca-paper-bridge.md](../../docs/alpaca-paper-bridge.md)
+- [docs/paper-closeout.md](../../docs/paper-closeout.md)
 
-## Instructions
+If reference docs lack enough information, report **missing context** and **stop**. Do not infer architecture, invent implementation details, or broaden scope.
 
-1. Read only paths the coordinator scopes (or top-level inventory if scope says “repo root summary”).
-2. Build a **classification table** with columns: `path`, `category`, `notes` (one line).
-3. Do **not** edit files unless the coordinator explicitly asks in a **separate** follow-up—not in the same invocation.
-4. Do **not** change source code in this skill’s default mode.
-5. Do **not** run `git add`, `git commit`, or any submit/transport command.
-6. Do **not** spawn subagents or invoke other skills.
-7. **Stop after** delivering the classification table. If scope or references are missing, report the blocker and stop.
+## Task
+
+Classify repository helpers, tests, docs, and scripts (coordinator-scoped paths) into groups:
+
+- canonical
+- legacy
+- experimental
+- archive
+- delete-candidate
+
+When using the **repo-cleaner agent** manifest, also allow label **safety-critical** for paths tied to paper transport, credentials, or gates (classification only—no edits).
+
+## Forbidden actions
+
+- No edits unless a **separate** packet explicitly asks.
+- No source code changes in default mode.
+- No `git add` / `git commit`.
+- No submit, close, cancel, replace, or transport commands.
+- No spawning agents or other skills.
 
 ## Output format
 
 ```markdown
 ## Classification
 
-| path | category | notes |
-|------|----------|-------|
-| ... | tests | ... |
+| path | group | notes |
+|------|-------|-------|
 ```
+
+## Stop condition
+
+Deliver the table and **stop**. Missing reference file, unclear scope, or edit request without packet → report blocker and stop.

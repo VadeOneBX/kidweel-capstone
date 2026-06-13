@@ -45,6 +45,68 @@ Each skill names its reference docs and stops when references or coordinator con
 
 ---
 
+## Reference docs discipline
+
+Each skill must include a **Reference docs** section.
+
+The skill may only use those docs plus the **delegated packet context**.
+
+If the reference docs do not contain enough information, the skill must **report missing context and stop**.
+
+- Do not infer new architecture.
+- Do not invent implementation details.
+- Do not broaden scope.
+
+### Skill reference map
+
+| Skill | Reference docs |
+|-------|----------------|
+| **repo-cleaner** | `README.md`, `docs/notebook-alignment.md`, `docs/system-identity.md`, `docs/alpaca-paper-bridge.md`, `docs/paper-closeout.md` |
+| **readme-editor** | `June26 Kidweel Survivability.docx`, `README.md`, `docs/system-identity.md`, `docs/notebook-alignment.md`, `docs/paper-payload-candidates.md`, `docs/alpaca-paper-bridge.md`, `docs/paper-closeout.md`, `docs/subagency-proof.md` |
+| **safety-auditor** | `.env.example`, `.gitignore`, `docs/alpaca-paper-bridge.md`, `docs/paper-closeout.md`, `docs/system-identity.md`, `tests/test_alpaca_paper_bridge.py`, `tests/test_paper_closeout.py` |
+| **claude-advisor** | `docs/claude-advisor-context.md`, `docs/advisory-group-layer.md`, `docs/advisory-group-matrix.md`, `docs/sg-advisory-model.md`, `docs/system-identity.md`, `docs/spread-candidate-generation.md`, `docs/paper-approval-candidates.md`, `docs/paper-closeout.md`, **supplied live/context data** (coordinator packet only) |
+
+If a listed file is absent from the workspace, the skill reports it as missing context and stops—not an invitation to substitute other sources.
+
+**Narrative anchor:** [June26 Kidweel Survivability.docx](../June26%20Kidweel%20Survivability.docx) lives at the repo root. It is in the **readme-editor** reference tree only (operator voice, Constraint Survivability framing, artifact conversion). It does not override paper-only rules in `docs/system-identity.md` or transport docs.
+
+### Skill trees
+
+Delegation is a shallow tree: **coordinator → one skill → reference docs + packet**. Skills do not branch to other skills.
+
+```mermaid
+flowchart TB
+  coordinator[Main_coordinator]
+
+  coordinator --> repo_cleaner[repo-cleaner]
+  coordinator --> readme_editor[readme-editor]
+  coordinator --> safety_auditor[safety-auditor]
+  coordinator --> claude_advisor[claude-advisor]
+
+  repo_cleaner --> rc_refs["README.md · notebook-alignment · system-identity · alpaca-paper-bridge · paper-closeout"]
+
+  readme_editor --> re_surv["June26 Kidweel Survivability.docx"]
+  readme_editor --> re_refs["README.md · system-identity · notebook-alignment · paper-payload-candidates · alpaca-paper-bridge"]
+  re_surv --> re_refs
+
+  safety_auditor --> sa_refs[".env.example · .gitignore · alpaca-paper-bridge · paper-closeout · system-identity · test_alpaca_paper_bridge"]
+
+  claude_advisor --> ca_refs["claude-advisor-context · system-identity · spread-candidate-generation · paper-approval-candidates · paper-closeout"]
+  claude_advisor --> ca_live["Supplied live/context data packet"]
+  ca_live --> ca_refs
+```
+
+| Skill | Tree role | Primary leaf |
+|-------|-----------|--------------|
+| repo-cleaner | Classify repo layout vs docs | `docs/notebook-alignment.md` |
+| readme-editor | Narrative/README alignment | `June26 Kidweel Survivability.docx` |
+| safety-auditor | Env/endpoint/paper boundary audit | `docs/alpaca-paper-bridge.md` |
+| claude-advisor | Interpretive advisory flags | Coordinator-supplied context + `docs/claude-advisor-context.md` |
+
+Skill definitions: [.claude/skills/](../.claude/skills/).
+
+---
+
 ## Verification commands
 
 ```bash
