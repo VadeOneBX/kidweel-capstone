@@ -52,9 +52,13 @@ The problem is not getting systems to act. It is getting them to act **consisten
 
 ## System loop
 
-```
-Context → playbook → structure → validation → payload → paper transport → response → audit
-```
+<p align="center">
+  <a href="./diagrams/system_operating_loop.svg">
+    <img src="./diagrams/system_operating_loop.svg" alt="Operating loop: operator intent, see advisory, deterministic gates, paper transport execute" width="920"/>
+  </a>
+</p>
+
+**Data path:** `Context → playbook → structure → validation → payload → paper transport → response → audit`
 
 SpotGamma and related context feed screening and playbook selection. Structure and risk modules produce approved handoffs only when gates pass. The **repo-owned paper bridge** carries approved payloads when opted in; MCP remains a **transport-only** contract, not a decision layer. Audits record gate outcomes, broker responses, and normalized status.
 
@@ -150,6 +154,12 @@ Wherever software can **act**, teams need a clear rule for **when it may act**. 
 
 ## Subagency proof
 
+<p align="center">
+  <a href="./diagrams/subagency_delegation.svg">
+    <img src="./diagrams/subagency_delegation.svg" alt="Subagency: coordinator, bounded skills, deterministic gates, gated transport; forbidden path blocked" width="640"/>
+  </a>
+</p>
+
 Kidweel delegates **bounded** work to project skills and subagents under a human-directed coordinator—without granting transport authority ([subagency proof](./docs/subagency-proof.md), [AGENTS.md](./AGENTS.md)).
 
 **Subagents help the system see.** They do not help the system act.
@@ -181,16 +191,39 @@ Swarm-safe behavior means every assistant hits the same gates—not more authori
 
 ## Repository navigation
 
-| Doc | Topic |
-|-----|--------|
-| [docs/system-identity.md](./docs/system-identity.md) | Identity, structure policy, ML/subagent policy |
-| [docs/subagent-governance.md](./docs/subagent-governance.md) | Delegation and stop rules |
-| [docs/subagency-proof.md](./docs/subagency-proof.md) | Bounded skills proof |
-| [docs/claude-advisor-context.md](./docs/claude-advisor-context.md) | Claude advisor skill |
-| [docs/alpaca-paper-bridge.md](./docs/alpaca-paper-bridge.md) | Paper transport |
-| [docs/paper-closeout.md](./docs/paper-closeout.md) | Mleg closeout |
-| [docs/claude-overlay.md](./docs/claude-overlay.md) | Claude overlay (memo-only) |
-| [docs/claude-backtest-wiring.md](./docs/claude-backtest-wiring.md) | Claude backtest (research only) |
-| [integrations/alpaca_mcp/README.md](./integrations/alpaca_mcp/README.md) | Alpaca MCP scaffold |
-| [integrations/alpaca_mcp/transport_contract.md](./integrations/alpaca_mcp/transport_contract.md) | C10A transport contract |
-| [diagrams/claude_context_layer.md](./diagrams/claude_context_layer.md) | Context layer placement |
+**Governance & identity**
+
+<p>
+  <a href="./docs/system-identity.md"><img src="https://img.shields.io/badge/System_identity-374151?style=for-the-badge" alt="System identity"/></a>
+  <a href="./docs/subagent-governance.md"><img src="https://img.shields.io/badge/Subagent_governance-374151?style=for-the-badge" alt="Subagent governance"/></a>
+  <a href="./docs/subagency-proof.md"><img src="https://img.shields.io/badge/Subagency_proof-374151?style=for-the-badge" alt="Subagency proof"/></a>
+  <a href="./AGENTS.md"><img src="https://img.shields.io/badge/AGENTS-374151?style=for-the-badge" alt="AGENTS"/></a>
+  <a href="./CLAUDE.md"><img src="https://img.shields.io/badge/CLAUDE-374151?style=for-the-badge" alt="CLAUDE"/></a>
+</p>
+
+**Paper path**
+
+<p>
+  <a href="./docs/alpaca-paper-bridge.md"><img src="https://img.shields.io/badge/Paper_bridge-1e3a5f?style=for-the-badge" alt="Alpaca paper bridge"/></a>
+  <a href="./docs/paper-closeout.md"><img src="https://img.shields.io/badge/Mleg_closeout-1e3a5f?style=for-the-badge" alt="Paper closeout"/></a>
+  <a href="./docs/paper-order-status-audit.md"><img src="https://img.shields.io/badge/Order_status_audit-1e3a5f?style=for-the-badge" alt="Order status audit"/></a>
+  <a href="./docs/notebook-alignment.md"><img src="https://img.shields.io/badge/Notebook_alignment-1e3a5f?style=for-the-badge" alt="Notebook alignment"/></a>
+</p>
+
+**Claude & advisory**
+
+<p>
+  <a href="./docs/claude-advisor-context.md"><img src="https://img.shields.io/badge/Claude_advisor-4c1d95?style=for-the-badge" alt="Claude advisor context"/></a>
+  <a href="./docs/advisory-group-matrix.md"><img src="https://img.shields.io/badge/Advisory_groups-4c1d95?style=for-the-badge" alt="Advisory group matrix"/></a>
+  <a href="./docs/claude-overlay.md"><img src="https://img.shields.io/badge/Claude_overlay-4c1d95?style=for-the-badge" alt="Claude overlay"/></a>
+  <a href="./docs/claude-backtest-wiring.md"><img src="https://img.shields.io/badge/Claude_backtest-4c1d95?style=for-the-badge" alt="Claude backtest wiring"/></a>
+</p>
+
+**Integrations & diagrams**
+
+<p>
+  <a href="./integrations/alpaca_mcp/README.md"><img src="https://img.shields.io/badge/Alpaca_MCP-14532d?style=for-the-badge" alt="Alpaca MCP README"/></a>
+  <a href="./integrations/alpaca_mcp/transport_contract.md"><img src="https://img.shields.io/badge/C10A_transport-14532d?style=for-the-badge" alt="C10A transport contract"/></a>
+  <a href="./diagrams/claude_context_layer.md"><img src="https://img.shields.io/badge/Context_layer-14532d?style=for-the-badge" alt="Claude context layer"/></a>
+  <a href="./diagrams/system_operating_loop.svg"><img src="https://img.shields.io/badge/System_loop_diagram-14532d?style=for-the-badge" alt="System operating loop SVG"/></a>
+</p>

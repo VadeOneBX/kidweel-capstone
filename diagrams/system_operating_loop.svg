@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 248" role="img" aria-labelledby="title desc">
+  <title id="title">Kidweel system operating loop</title>
+  <desc id="desc">Operator intent flows through advisory see-layer, deterministic decide-layer, and paper transport execute-layer.</desc>
+  <defs>
+    <linearGradient id="panel" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4a4a4a"/>
+      <stop offset="100%" stop-color="#3d3d3d"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#5ec8e8"/>
+    </marker>
+    <filter id="shadow" x="-4%" y="-4%" width="108%" height="108%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <rect width="960" height="248" rx="12" fill="#353535"/>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" fill="#f0f0f0">
+    <g filter="url(#shadow)">
+      <rect x="16" y="20" width="200" height="208" rx="8" fill="url(#panel)" stroke="#6b6b6b" stroke-width="1"/>
+      <line x1="16" y1="52" x2="216" y2="52" stroke="#6b6b6b"/>
+      <text x="116" y="42" text-anchor="middle" font-size="13" font-weight="600">Operator</text>
+      <rect x="32" y="72" width="168" height="36" rx="6" fill="#1c1c1c" stroke="#555"/>
+      <text x="116" y="95" text-anchor="middle" font-size="11">Coordinator_packet_intent</text>
+    </g>
+    <g filter="url(#shadow)">
+      <rect x="236" y="20" width="200" height="208" rx="8" fill="url(#panel)" stroke="#6b6b6b" stroke-width="1"/>
+      <line x1="236" y1="52" x2="436" y2="52" stroke="#6b6b6b"/>
+      <text x="336" y="42" text-anchor="middle" font-size="13" font-weight="600">See_advisory</text>
+      <rect x="252" y="68" width="168" height="36" rx="6" fill="#1c1c1c" stroke="#555"/>
+      <text x="336" y="91" text-anchor="middle" font-size="10.5">Claude_advisor_ADVISORY</text>
+      <rect x="252" y="116" width="168" height="36" rx="6" fill="#1c1c1c" stroke="#555"/>
+      <text x="336" y="139" text-anchor="middle" font-size="10.5">Other_bounded_skills</text>
+    </g>
+    <g filter="url(#shadow)">
+      <rect x="456" y="20" width="220" height="208" rx="8" fill="url(#panel)" stroke="#6b6b6b" stroke-width="1"/>
+      <line x1="456" y1="52" x2="676" y2="52" stroke="#6b6b6b"/>
+      <text x="566" y="42" text-anchor="middle" font-size="13" font-weight="600">Decide_deterministic</text>
+      <rect x="472" y="88" width="92" height="36" rx="6" fill="#1c1c1c" stroke="#555"/>
+      <text x="518" y="104" text-anchor="middle" font-size="9">Spread_math</text>
+      <text x="518" y="116" text-anchor="middle" font-size="9">PMP_RR</text>
+      <line x1="564" y1="106" x2="588" y2="106" stroke="#5ec8e8" stroke-width="2" marker-end="url(#arrow)"/>
+      <rect x="588" y="88" width="72" height="36" rx="6" fill="#1c1c1c" stroke="#555"/>
+      <text x="624" y="111" text-anchor="middle" font-size="10.5">Paper_gates</text>
+    </g>
+    <g filter="url(#shadow)">
+      <rect x="696" y="20" width="248" height="208" rx="8" fill="url(#panel)" stroke="#6b6b6b" stroke-width="1"/>
+      <line x1="696" y1="52" x2="944" y2="52" stroke="#6b6b6b"/>
+      <text x="820" y="42" text-anchor="middle" font-size="13" font-weight="600">Execute_transport</text>
+      <rect x="708" y="108" width="48" height="40" rx="6" fill="#1c1c1c" stroke="#555"/>
+      <text x="732" y="125" text-anchor="middle" font-size="7.5">Paper_</text>
+      <text x="732" y="136" text-anchor="middle" font-size="7.5">payload</text>
+      <line x1="756" y1="128" x2="764" y2="128" stroke="#5ec8e8" stroke-width="2" marker-end="url(#arrow)"/>
+      <rect x="764" y="108" width="48" height="40" rx="6" fill="#1c1c1c" stroke="#555"/>
+      <text x="788" y="125" text-anchor="middle" font-size="7.5">Alpaca_</text>
+      <text x="788" y="136" text-anchor="middle" font-size="7.5">paper</text>
+      <line x1="812" y1="128" x2="820" y2="128" stroke="#5ec8e8" stroke-width="2" marker-end="url(#arrow)"/>
+      <rect x="820" y="108" width="48" height="40" rx="6" fill="#1c1c1c" stroke="#555"/>
+      <text x="844" y="125" text-anchor="middle" font-size="7.5">Status_</text>
+      <text x="844" y="136" text-anchor="middle" font-size="7.5">audit</text>
+      <line x1="868" y1="128" x2="876" y2="128" stroke="#5ec8e8" stroke-width="2" marker-end="url(#arrow)"/>
+      <rect x="876" y="108" width="52" height="40" rx="6" fill="#1c1c1c" stroke="#555"/>
+      <text x="902" y="125" text-anchor="middle" font-size="7.5">Close_</text>
+      <text x="902" y="136" text-anchor="middle" font-size="7.5">quote_mid</text>
+    </g>
+    <line x1="216" y1="124" x2="236" y2="124" stroke="#9a9a9a" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <line x1="436" y1="124" x2="456" y2="124" stroke="#9a9a9a" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <line x1="676" y1="124" x2="696" y2="124" stroke="#9a9a9a" stroke-width="1.5" marker-end="url(#arrow)"/>
+  </g>
+  <text x="480" y="236" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#b0b0b0">Authority: see � decide � execute (paper-only transport is opt-in)</text>
+</svg>
