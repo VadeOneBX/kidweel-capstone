@@ -169,6 +169,7 @@ venv.bak/
 data/cache/
 data/spotgamma/*.csv
 *.parquet
+spotgamma
 
 # IDE
 .vscode/*
@@ -222,6 +223,10 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
+# Cursor planning receipts (private; not public artifacts)
+*.plan.md
+.cursor/plans/
+
 # Marimo
 marimo/_static/
 marimo/_lsp/
@@ -243,3 +248,6 @@ data/*
 /.cursor/rules
 
 model.joblib
+
+/June26 Kidweel Survivability.docx
+
