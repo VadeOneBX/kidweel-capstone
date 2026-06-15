@@ -12,4 +12,5 @@ alpaca-py
 scikit-learn
 joblib
 openpyxl
-pytest
+# test / dev (see pyproject [project.optional-dependencies] dev)
+pytest>=8.0

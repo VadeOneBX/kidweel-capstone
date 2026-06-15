@@ -28,16 +28,13 @@ dependencies = [
 
     # Excel ingestion (you already depend on this implicitly)
     "openpyxl>=3.1",
-
-    # Canonical test runner (see CLAUDE.md / AGENTS.md)
-    "pytest>=8.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "ipykernel",
     "jupyter",
-    "pytest",
+    "pytest>=8.0",
     "ruff",
     "mypy"
 ]
