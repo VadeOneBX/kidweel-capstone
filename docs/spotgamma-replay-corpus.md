@@ -8,6 +8,7 @@ Real-data bridge from SpotGamma exports to a **replay-staging** context table. N
 
 | Profile | Typical file | Notes |
 |---------|----------------|-------|
+| `spy_excel` | `raw/YYYY-MM-DD/SPY.xlsx` | Same fields as `spy_history`; preferred for same-date `spy_*` attachment when present in the session folder |
 | `spy_history` | `SPY_history_table_*.csv` | Daily SPY regime context; `regime_label="SPY"`; optional `vrp = 1M IV − 1M RV` |
 | `squeeze` | `squeeze.xlsx` | Scanner; header row auto-detected (row 0 vs 1) |
 | `vrp` | `vrp.xlsx` | VRP scanner |

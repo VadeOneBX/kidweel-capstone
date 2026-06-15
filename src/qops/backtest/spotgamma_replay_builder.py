@@ -15,7 +15,7 @@ _CANDIDATE_PROFILES: frozenset[str] = frozenset(
 )
 
 _RAW_FRESH_PROFILES: frozenset[str] = frozenset(
-    {"squeeze", "vrp", "reverse_vrp", "spy_history"}
+    {"squeeze", "vrp", "reverse_vrp", "spy_history", "spy_excel"}
 )
 
 STALE_CONTEXT_CSV_MESSAGE = (
@@ -121,6 +121,8 @@ def _infer_source_profile(row: pd.Series) -> str:
     source_file = str(row.get("source_file", "")).lower()
     if source_type == "SPY_HISTORY":
         return "spy_history"
+    if source_type == "SPY_EXCEL":
+        return "spy_excel"
     if "spotgamma_weekly" in source_file:
         return "processed_weekly"
     if source_type == "REVERSE_VRP":
@@ -198,9 +200,19 @@ def assess_context_csv_freshness(path: str | Path) -> ContextCsvFreshness:
     )
 
 
-def rebuild_fresh_context(spotgamma_root: str | Path) -> list[SpotGammaContextRow]:
+def rebuild_fresh_context(
+    spotgamma_root: str | Path,
+    *,
+    raw_session_dates: tuple[str, ...] | None = None,
+    include_processed_weekly: bool = True,
+) -> list[SpotGammaContextRow]:
     """Rebuild context from committed ingest with raw profiles (paper-only, no execution)."""
-    return build_context_corpus(spotgamma_root, include_raw=True)
+    return build_context_corpus(
+        spotgamma_root,
+        include_raw=True,
+        raw_session_dates=raw_session_dates,
+        include_processed_weekly=include_processed_weekly,
+    )
 
 
 def load_contexts(
@@ -238,9 +250,20 @@ def _spy_slice(ctx: SpotGammaContextRow) -> _SpyContextSlice:
 
 
 def build_spy_context_by_date(contexts: list[SpotGammaContextRow]) -> dict[str, _SpyContextSlice]:
+    """Index SPY market context by trade_date.
+
+    When both ``spy_history`` CSV and session ``spy_excel`` exist for the same date,
+    ``spy_excel`` wins (canonical helper export in the raw session folder).
+    """
     index: dict[str, _SpyContextSlice] = {}
     for ctx in contexts:
         if ctx.source_profile != "spy_history":
+            continue
+        if not ctx.trade_date:
+            continue
+        index[ctx.trade_date] = _spy_slice(ctx)
+    for ctx in contexts:
+        if ctx.source_profile != "spy_excel":
             continue
         if not ctx.trade_date:
             continue
@@ -276,7 +299,7 @@ def _build_one_candidate(
 ) -> ReplayCandidateRow | None:
     if ctx.source_profile not in _CANDIDATE_PROFILES:
         return None
-    if ctx.source_profile == "spy_history":
+    if ctx.source_profile in {"spy_history", "spy_excel"}:
         return None
 
     notes = parse_notes_kv(ctx.notes)

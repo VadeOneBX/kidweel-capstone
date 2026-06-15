@@ -13,6 +13,7 @@ from qops.ingest.spotgamma_loader import (
     discover_spy_history_csvs,
     load_processed_weekly_csv,
     load_scanner_xlsx,
+    load_spy_excel,
     load_spy_history_csv,
     parse_excel_serial_date,
     parse_numeric,
@@ -20,6 +21,7 @@ from qops.ingest.spotgamma_loader import (
     parse_trade_date,
     raw_input_date_from_path,
     session_date_from_dir,
+    spy_excel_path_in_session,
 )
 
 _SCANNER_FILENAMES: tuple[tuple[str, str], ...] = (
@@ -101,7 +103,26 @@ def _note_parts(**kwargs: object) -> str:
     return "|".join(parts)
 
 
-def context_from_spy_history_row(row: pd.Series) -> SpotGammaContextRow:
+_SCANNER_PROFILES: frozenset[str] = frozenset({"squeeze", "vrp", "reverse_vrp"})
+_SPY_MARKET_PROFILES: frozenset[str] = frozenset({"spy_history", "spy_excel"})
+
+
+@dataclass(frozen=True, slots=True)
+class RawSessionSpyExcelLoad:
+    """Outcome of loading SPY.xlsx from one raw session folder."""
+
+    session_date: str
+    path: str | None
+    context_rows: tuple[SpotGammaContextRow, ...]
+    parse_error: str | None
+
+
+def context_from_spy_market_row(
+    row: pd.Series,
+    *,
+    source_profile: str,
+    source_type: str,
+) -> SpotGammaContextRow:
     trade_date = parse_trade_date(row.get("trade_date"))
     raw_input = raw_input_date_from_path(Path(str(row.get("source_file", ""))))
     if trade_date is None and raw_input:
@@ -117,6 +138,9 @@ def context_from_spy_history_row(row: pd.Series) -> SpotGammaContextRow:
         hedge_wall=parse_numeric(row.get("hedge_wall")),
         call_wall=parse_numeric(row.get("call_wall")),
         put_wall=parse_numeric(row.get("put_wall")),
+        put_call_oi_ratio=parse_numeric(row.get("put_call_oi_ratio")),
+        volume_ratio=parse_numeric(row.get("volume_ratio")),
+        delta_ratio=parse_numeric(row.get("delta_ratio")),
         one_month_rv=one_month_rv,
         one_month_iv=one_month_iv,
         skew=parse_numeric(row.get("skew")),
@@ -140,8 +164,8 @@ def context_from_spy_history_row(row: pd.Series) -> SpotGammaContextRow:
         symbol="SPY",
         trade_date=trade_date or "",
         source_file=str(row["source_file"]),
-        source_type="SPY_HISTORY",
-        source_profile="spy_history",
+        source_type=source_type,
+        source_profile=source_profile,
         raw_input_date=raw_input,
         gamma_ratio=gamma_ratio,
         vrp=vrp,
@@ -153,6 +177,62 @@ def context_from_spy_history_row(row: pd.Series) -> SpotGammaContextRow:
         confidence=None,
         notes=notes,
         missing_fields=",".join(missing),
+    )
+
+
+def context_from_spy_history_row(row: pd.Series) -> SpotGammaContextRow:
+    return context_from_spy_market_row(
+        row,
+        source_profile="spy_history",
+        source_type="SPY_HISTORY",
+    )
+
+
+def context_from_spy_excel_row(row: pd.Series) -> SpotGammaContextRow:
+    return context_from_spy_market_row(
+        row,
+        source_profile="spy_excel",
+        source_type="SPY_EXCEL",
+    )
+
+
+def load_session_spy_excel_context(session_dir: str | Path) -> RawSessionSpyExcelLoad:
+    session_date = session_date_from_dir(Path(session_dir))
+    if session_date is None:
+        return RawSessionSpyExcelLoad(
+            session_date="",
+            path=None,
+            context_rows=(),
+            parse_error="not a dated raw session directory",
+        )
+    spy_path = spy_excel_path_in_session(session_dir)
+    if spy_path is None:
+        return RawSessionSpyExcelLoad(
+            session_date=session_date,
+            path=None,
+            context_rows=(),
+            parse_error=None,
+        )
+    try:
+        df = load_spy_excel(spy_path)
+    except (ValueError, FileNotFoundError) as exc:
+        return RawSessionSpyExcelLoad(
+            session_date=session_date,
+            path=str(spy_path.resolve()),
+            context_rows=(),
+            parse_error=str(exc),
+        )
+    rows: list[SpotGammaContextRow] = []
+    for _, series in df.iterrows():
+        row = context_from_spy_excel_row(series)
+        if not row.trade_date:
+            continue
+        rows.append(row)
+    return RawSessionSpyExcelLoad(
+        session_date=session_date,
+        path=str(spy_path.resolve()),
+        context_rows=tuple(rows),
+        parse_error=None,
     )
 
 
@@ -316,17 +396,29 @@ def context_from_processed_row(row: pd.Series) -> SpotGammaContextRow:
     )
 
 
-def load_raw_profile_contexts(spotgamma_root: str | Path) -> list[SpotGammaContextRow]:
+def load_raw_profile_contexts(
+    spotgamma_root: str | Path,
+    *,
+    raw_session_dates: tuple[str, ...] | None = None,
+) -> list[SpotGammaContextRow]:
     root = Path(spotgamma_root)
     rows: list[SpotGammaContextRow] = []
+    allowed_dates: frozenset[str] | None = None
+    if raw_session_dates:
+        allowed_dates = frozenset(d.strip() for d in raw_session_dates if d.strip())
 
     for csv_path in discover_spy_history_csvs(root):
         df = load_spy_history_csv(csv_path)
         for _, series in df.iterrows():
-            rows.append(context_from_spy_history_row(series))
+            row = context_from_spy_history_row(series)
+            if allowed_dates is not None and row.trade_date not in allowed_dates:
+                continue
+            rows.append(row)
 
     for session_dir in discover_raw_session_dirs(root):
         session_date = session_date_from_dir(session_dir)
+        if allowed_dates is not None and session_date not in allowed_dates:
+            continue
         for filename, _ in _SCANNER_FILENAMES:
             path = session_dir / filename
             if not path.is_file():
@@ -344,7 +436,42 @@ def load_raw_profile_contexts(spotgamma_root: str | Path) -> list[SpotGammaConte
                     if parse_symbol(series.get("symbol")) is None:
                         continue
                     rows.append(context_from_vrp_row(series, profile=profile, session_date=session_date))
+        spy_load = load_session_spy_excel_context(session_dir)
+        rows.extend(spy_load.context_rows)
     return rows
+
+
+def is_scanner_context_row(ctx: SpotGammaContextRow) -> bool:
+    return ctx.source_profile in _SCANNER_PROFILES
+
+
+def is_spy_market_context_row(ctx: SpotGammaContextRow) -> bool:
+    return ctx.source_profile in _SPY_MARKET_PROFILES
+
+
+def split_scanner_and_spy_contexts(
+    contexts: list[SpotGammaContextRow],
+) -> tuple[list[SpotGammaContextRow], list[SpotGammaContextRow]]:
+    scanner: list[SpotGammaContextRow] = []
+    spy: list[SpotGammaContextRow] = []
+    for ctx in contexts:
+        if is_spy_market_context_row(ctx):
+            spy.append(ctx)
+        elif is_scanner_context_row(ctx):
+            scanner.append(ctx)
+    return scanner, spy
+
+
+def resolve_spy_context_source(contexts: list[SpotGammaContextRow]) -> str:
+    _, spy_rows = split_scanner_and_spy_contexts(contexts)
+    if not spy_rows:
+        return "none"
+    profiles = {r.source_profile for r in spy_rows}
+    if "spy_excel" in profiles:
+        return "spy_excel"
+    if "spy_history" in profiles:
+        return "spy_history"
+    return "unknown"
 
 
 def build_context_corpus(
@@ -352,18 +479,25 @@ def build_context_corpus(
     *,
     include_raw: bool = False,
     default_confidence_for_raw: float | None = None,
+    raw_session_dates: tuple[str, ...] | None = None,
+    include_processed_weekly: bool = True,
 ) -> list[SpotGammaContextRow]:
     """Build context rows from processed weekly CSVs and optional raw profile exports."""
     _ = default_confidence_for_raw
     root = Path(spotgamma_root)
     rows: list[SpotGammaContextRow] = []
-    for csv_path in discover_processed_weekly_csvs(root):
-        df = load_processed_weekly_csv(csv_path)
-        for _, series in df.iterrows():
-            rows.append(context_from_processed_row(series))
+    if include_processed_weekly:
+        for csv_path in discover_processed_weekly_csvs(root):
+            df = load_processed_weekly_csv(csv_path)
+            for _, series in df.iterrows():
+                rows.append(context_from_processed_row(series))
 
     if include_raw:
-        rows.extend(load_raw_profile_contexts(root))
+        rows.extend(
+            load_raw_profile_contexts(root, raw_session_dates=raw_session_dates)
+        )
+    elif raw_session_dates:
+        raise ValueError("raw_session_dates requires include_raw=True")
     return rows
 
 

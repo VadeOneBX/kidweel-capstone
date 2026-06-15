@@ -41,6 +41,18 @@ def main(argv: list[str] | None = None) -> None:
         help="Also ingest raw profile exports (SPY history CSV + scanner XLSX)",
     )
     p.add_argument(
+        "--raw-session-date",
+        action="append",
+        default=[],
+        metavar="YYYY-MM-DD",
+        help="Limit raw ingest to session folder(s) under raw/ (repeatable)",
+    )
+    p.add_argument(
+        "--raw-only",
+        action="store_true",
+        help="With --include-raw, skip processed weekly CSVs (session scanners only)",
+    )
+    p.add_argument(
         "--default-confidence",
         type=float,
         default=None,
@@ -53,10 +65,13 @@ def main(argv: list[str] | None = None) -> None:
     )
     ns = p.parse_args(argv)
 
+    raw_dates = tuple(ns.raw_session_date) if ns.raw_session_date else None
     contexts = build_context_corpus(
         ns.spotgamma_root,
         include_raw=ns.include_raw,
         default_confidence_for_raw=ns.default_confidence,
+        raw_session_dates=raw_dates,
+        include_processed_weekly=not ns.raw_only,
     )
     summary = summarize_corpus(contexts)
     missing = missing_field_summary(contexts)

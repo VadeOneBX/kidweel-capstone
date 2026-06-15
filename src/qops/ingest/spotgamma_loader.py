@@ -9,7 +9,9 @@ from typing import Literal
 
 import pandas as pd
 
-ExportProfile = Literal["spy_history", "squeeze", "vrp", "reverse_vrp"]
+ExportProfile = Literal["spy_history", "spy_excel", "squeeze", "vrp", "reverse_vrp"]
+
+_SPY_EXCEL_FILENAMES = frozenset({"spy.xlsx"})
 
 _DATE_DIR_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _SPY_HISTORY_GLOB = "SPY_history*.csv"
@@ -116,7 +118,18 @@ def detect_csv_profile(columns: list[object]) -> ExportProfile | None:
     return None
 
 
+def is_spy_excel_filename(path: str | Path) -> bool:
+    return Path(path).name.lower() in _SPY_EXCEL_FILENAMES
+
+
+def detect_spy_excel_profile(columns: list[object]) -> bool:
+    """True when columns match SPY_history / SPY.xlsx layout (not a scanner export)."""
+    return detect_csv_profile(columns) == "spy_history"
+
+
 def detect_xlsx_profile(columns: list[object], *, path: Path) -> ExportProfile | None:
+    if is_spy_excel_filename(path) and detect_spy_excel_profile(columns):
+        return "spy_excel"
     keys = {normalize_header_label(c) for c in columns}
     if "symbol" in keys and "gamma ratio" in keys and "1 m iv" not in keys and "stock volume" in keys:
         return "squeeze"
@@ -163,6 +176,9 @@ def _read_xlsx_with_profile(path: Path) -> tuple[pd.DataFrame, ExportProfile]:
     for header_row in (0, 1):
         df = pd.read_excel(path, engine="openpyxl", header=header_row)
         profile = detect_xlsx_profile(list(df.columns), path=path)
+        if profile == "spy_excel":
+            last_err = f"header_row={header_row} spy excel (use load_spy_excel)"
+            continue
         if profile is not None:
             table = _SQUEEZE_HEADERS if profile == "squeeze" else _VRP_HEADERS
             rename = _build_rename_map(list(df.columns), table)
@@ -176,6 +192,32 @@ def _read_xlsx_with_profile(path: Path) -> tuple[pd.DataFrame, ExportProfile]:
             return out, profile
         last_err = f"header_row={header_row} unmatched columns={list(df.columns)[:6]}"
     raise ValueError(f"cannot detect xlsx profile for {path}: {last_err}")
+
+
+def spy_excel_path_in_session(session_dir: str | Path) -> Path | None:
+    """Return session-local SPY.xlsx if present (context file, not a scanner export)."""
+    root = Path(session_dir)
+    if not root.is_dir():
+        return None
+    for name in ("SPY.xlsx", "spy.xlsx"):
+        candidate = root / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def load_spy_excel(path: str | Path) -> pd.DataFrame:
+    p = Path(path)
+    if not p.is_file():
+        raise FileNotFoundError(f"spy excel not found: {p.resolve()}")
+    if not is_spy_excel_filename(p):
+        raise ValueError(f"not a SPY excel filename: {p.name}")
+    df = pd.read_excel(p, engine="openpyxl", header=0)
+    if not detect_spy_excel_profile(list(df.columns)):
+        raise ValueError(f"file is not spy_excel profile: {p}")
+    rename = _build_rename_map(list(df.columns), _SPY_HISTORY_HEADERS)
+    out = df.rename(columns=rename)
+    return out.assign(source_file=str(p.resolve()), source_profile="spy_excel")
 
 
 def load_spy_history_csv(path: str | Path) -> pd.DataFrame:
@@ -195,6 +237,8 @@ def load_scanner_xlsx(path: str | Path) -> tuple[pd.DataFrame, ExportProfile]:
     p = Path(path)
     if not p.is_file():
         raise FileNotFoundError(f"scanner xlsx not found: {p.resolve()}")
+    if is_spy_excel_filename(p):
+        raise ValueError(f"SPY excel is not a scanner export: {p}")
     df, profile = _read_xlsx_with_profile(p)
     return df.assign(source_file=str(p.resolve()), source_profile=profile), profile
 

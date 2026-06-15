@@ -33,6 +33,8 @@ def _resolve_contexts(
     include_raw: bool,
     allow_stale_input: bool,
     rebuild_if_stale: bool,
+    raw_session_dates: tuple[str, ...] | None,
+    raw_only: bool,
 ) -> tuple[list, str]:
     """Return (contexts, context_source_label)."""
     if input_path.is_file():
@@ -47,7 +49,11 @@ def _resolve_contexts(
                     "Rebuilding fresh context via ingest (--include-raw).",
                     file=sys.stderr,
                 )
-                return rebuild_fresh_context(spotgamma_root), "ingest_rebuild"
+                return rebuild_fresh_context(
+                    spotgamma_root,
+                    raw_session_dates=raw_session_dates,
+                    include_processed_weekly=not raw_only,
+                ), "ingest_rebuild"
             if allow_stale_input:
                 print(f"WARNING: {STALE_CONTEXT_CSV_MESSAGE}", file=sys.stderr)
                 print(
@@ -59,7 +65,11 @@ def _resolve_contexts(
         return load_contexts_from_csv(input_path), "fresh_csv"
 
     if include_raw:
-        return rebuild_fresh_context(spotgamma_root), "ingest_rebuild"
+        return rebuild_fresh_context(
+            spotgamma_root,
+            raw_session_dates=raw_session_dates,
+            include_processed_weekly=not raw_only,
+        ), "ingest_rebuild"
     raise SystemExit(
         f"Input not found: {input_path}. "
         "Re-run spotgamma_replay_corpus.py --include-raw or pass --include-raw here."
@@ -96,6 +106,18 @@ def main(argv: list[str] | None = None) -> None:
         help="If --input is stale, rebuild fresh context via ingest (--include-raw)",
     )
     p.add_argument(
+        "--raw-session-date",
+        action="append",
+        default=[],
+        metavar="YYYY-MM-DD",
+        help="Limit raw ingest to session folder(s) under raw/ (repeatable)",
+    )
+    p.add_argument(
+        "--raw-only",
+        action="store_true",
+        help="With rebuild/include-raw, skip processed weekly CSVs",
+    )
+    p.add_argument(
         "--output",
         type=Path,
         default=Path("data/processed/spotgamma_replay_candidates.csv"),
@@ -103,12 +125,15 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--no-write", action="store_true")
     ns = p.parse_args(argv)
 
+    raw_dates = tuple(ns.raw_session_date) if ns.raw_session_date else None
     contexts, source = _resolve_contexts(
         input_path=ns.input,
         spotgamma_root=ns.spotgamma_root,
         include_raw=ns.include_raw,
         allow_stale_input=ns.allow_stale_input,
         rebuild_if_stale=ns.rebuild_if_stale,
+        raw_session_dates=raw_dates,
+        raw_only=ns.raw_only,
     )
     candidates = build_replay_candidates(contexts)
     summary = summarize_replay_candidates(candidates)
