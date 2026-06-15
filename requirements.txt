@@ -1,0 +1,15 @@
+Only for safety / Cursor fallback:
+pandas
+numpy
+pyarrow
+python-dotenv
+pydantic
+requests
+pytz
+tqdm
+rich
+alpaca-py
+scikit-learn
+joblib
+openpyxl
+pytest
