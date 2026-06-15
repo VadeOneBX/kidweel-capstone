@@ -68,15 +68,23 @@ def load_paper_transport_results(path: str | Path) -> list[SubmittedTransportRow
     df = pd.read_csv(p)
     out: list[SubmittedTransportRow] = []
     for _, series in df.iterrows():
+        external_order_id = _parse_str(series.get("external_order_id"))
+        transport_status = _parse_str(series.get("transport_status"))
+        if not external_order_id:
+            external_order_id = _parse_str(series.get("close_external_order_id"))
+        if not transport_status:
+            close_status = _parse_str(series.get("close_status"))
+            if close_status == "PAPER_CLOSE_SUBMITTED":
+                transport_status = "PAPER_SUBMITTED"
         out.append(
             SubmittedTransportRow(
                 payload_id=_parse_str(series.get("payload_id")),
                 approval_id=_parse_str(series.get("approval_id")),
-                external_order_id=_parse_str(series.get("external_order_id")),
+                external_order_id=external_order_id,
                 broker_mode=_parse_str(series.get("broker_mode"), "paper"),
                 previous_status=_parse_str(series.get("status")),
                 submitted_at=_parse_str(series.get("submitted_at")),
-                transport_status=_parse_str(series.get("transport_status")),
+                transport_status=transport_status,
             )
         )
     return out

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -20,9 +21,11 @@ from qops.execution.alpaca_paper_bridge import (
     check_alpaca_profile_cli_credentials,
     effective_transport_limit,
     filter_ready_payloads,
+    load_local_env,
     normalize_paper_base_url,
     profile_cli_submit_blocked,
     run_paper_payload_transport,
+    sanitize_alpaca_mleg_order_request,
     submit_alpaca_paper_mleg_order,
     transport_error_raw,
     validate_paper_endpoint,
@@ -108,7 +111,8 @@ def test_missing_credentials_fail_submit(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.delenv("ALPACA_PAPER_API_KEY", raising=False)
     monkeypatch.delenv("ALPACA_PAPER_SECRET_KEY", raising=False)
     monkeypatch.delenv("ALPACA_PAPER_BASE_URL", raising=False)
-    results, fatal = run_paper_payload_transport([_ready_payload()], submit_paper=True, limit=1)
+    with patch("qops.execution.alpaca_paper_bridge.load_local_env", return_value=False):
+        results, fatal = run_paper_payload_transport([_ready_payload()], submit_paper=True, limit=1)
     assert fatal is not None
     assert results == []
 
@@ -177,6 +181,42 @@ def test_build_mleg_request_debit_positive_limit() -> None:
     assert req.limit_price == 1.05
     assert len(req.legs) == 2
     assert req.client_order_id == deterministic_client_order_id(_ready_payload())
+
+
+def test_mleg_request_has_no_parent_symbol() -> None:
+    req = build_alpaca_mleg_order_request(_ready_payload())
+    assert req.symbol is None
+    sanitized = sanitize_alpaca_mleg_order_request(req)
+    assert "symbol" not in sanitized
+
+
+def test_mleg_request_two_legs_with_required_fields() -> None:
+    from alpaca.trading.enums import OrderClass, OrderType, TimeInForce
+
+    req = build_alpaca_mleg_order_request(_ready_payload())
+    assert req.order_class == OrderClass.MLEG
+    assert req.type == OrderType.LIMIT
+    assert req.time_in_force == TimeInForce.DAY
+    assert req.qty == 1.0
+    assert len(req.legs) == 2
+    for leg in req.legs:
+        assert leg.symbol
+        assert leg.side is not None
+        assert leg.ratio_qty == 1.0
+        assert leg.position_intent is not None
+        assert leg.position_intent.value in {"buy_to_open", "sell_to_open"}
+
+
+def test_mleg_sanitized_request_leg_shape() -> None:
+    req = build_alpaca_mleg_order_request(_ready_payload())
+    sanitized = sanitize_alpaca_mleg_order_request(req)
+    assert sanitized["order_class"] == "mleg"
+    assert sanitized["type"] == "limit"
+    assert sanitized["time_in_force"] == "day"
+    legs = sanitized["legs"]
+    assert len(legs) == 2
+    for leg in legs:
+        assert set(leg.keys()) >= {"symbol", "side", "ratio_qty", "position_intent"}
 
 
 def test_build_mleg_request_credit_negative_limit() -> None:
@@ -307,6 +347,75 @@ def test_submit_paper_profile_cli_fails_closed() -> None:
     with pytest.raises(SystemExit) as exc:
         submit_main(["--submit-paper", "--auth-mode", "profile_cli"])
     assert exc.value.code == 1
+
+
+def test_load_local_env_populates_paper_triplet_for_check(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "ALPACA_PAPER_API_KEY=from_dotenv_key\n"
+        "ALPACA_PAPER_SECRET_KEY=from_dotenv_secret\n"
+        f"ALPACA_PAPER_BASE_URL={CANONICAL_PAPER_BASE_URL}\n",
+        encoding="utf-8",
+    )
+    with patch.dict("os.environ", {}, clear=True):
+        load_local_env(env_path=env_file)
+        check = check_alpaca_paper_credentials()
+    assert check.credential_status == "READY"
+    assert check.env_pair_label == "ALPACA_PAPER_*"
+
+
+def test_load_local_env_does_not_override_exported_vars(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "ALPACA_PAPER_API_KEY=dotenv_key\n"
+        "ALPACA_PAPER_SECRET_KEY=dotenv_secret\n"
+        f"ALPACA_PAPER_BASE_URL={CANONICAL_PAPER_BASE_URL}\n",
+        encoding="utf-8",
+    )
+    import os
+
+    with patch.dict(
+        "os.environ",
+        {
+            "ALPACA_PAPER_API_KEY": "exported_key",
+            "ALPACA_PAPER_SECRET_KEY": "exported_secret",
+            "ALPACA_PAPER_BASE_URL": CANONICAL_PAPER_BASE_URL,
+        },
+        clear=True,
+    ):
+        load_local_env(env_path=env_file)
+        check = check_alpaca_paper_credentials()
+        assert check.credential_status == "READY"
+        assert os.environ["ALPACA_PAPER_API_KEY"] == "exported_key"
+
+
+def test_missing_paper_base_url_reports_endpoint_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ALPACA_PAPER_API_KEY", "key")
+    monkeypatch.setenv("ALPACA_PAPER_SECRET_KEY", "secret")
+    monkeypatch.delenv("ALPACA_PAPER_BASE_URL", raising=False)
+    check = check_alpaca_paper_credentials()
+    assert check.endpoint_detail == "missing_paper_base_url"
+    assert "ALPACA_PAPER_BASE_URL" in check.missing_keys
+
+
+def test_missing_secret_reports_key_name_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ALPACA_PAPER_API_KEY", "key")
+    monkeypatch.delenv("ALPACA_PAPER_SECRET_KEY", raising=False)
+    monkeypatch.setenv("ALPACA_PAPER_BASE_URL", CANONICAL_PAPER_BASE_URL)
+    check = check_alpaca_paper_credentials()
+    assert check.missing_keys == ("ALPACA_PAPER_SECRET_KEY",)
+    assert check.credential_status == "MISSING"
+
+
+def test_market_data_pair_does_not_satisfy_paper_transport(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ALPACA_API_KEY", "md_key")
+    monkeypatch.setenv("ALPACA_SECRET_KEY", "md_secret")
+    monkeypatch.delenv("ALPACA_PAPER_API_KEY", raising=False)
+    monkeypatch.delenv("ALPACA_PAPER_SECRET_KEY", raising=False)
+    monkeypatch.delenv("ALPACA_PAPER_BASE_URL", raising=False)
+    check = check_alpaca_paper_credentials()
+    assert check.credential_status == "MISSING"
+    assert check.detail == "no_paper_credential_triplet"
 
 
 def test_env_triplet_submit_path_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:

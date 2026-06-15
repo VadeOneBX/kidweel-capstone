@@ -55,6 +55,49 @@ _PAPER_CREDENTIAL_PAIRS: tuple[tuple[str, str, str, str], ...] = (
     ("APCA_API_KEY_ID", "APCA_API_SECRET_KEY", "APCA_API_BASE_URL", "APCA_*"),
 )
 
+_PREFERRED_PAPER_ENV_KEYS: tuple[str, ...] = (
+    "ALPACA_PAPER_API_KEY",
+    "ALPACA_PAPER_SECRET_KEY",
+    "ALPACA_PAPER_BASE_URL",
+)
+
+
+def repo_root_env_path() -> Path:
+    """Path to repo-root `.env` (never read or printed by callers)."""
+    return Path(__file__).resolve().parents[3] / ".env"
+
+
+def load_local_env(*, env_path: Path | None = None) -> bool:
+    """
+    Load local `.env` when python-dotenv is available.
+
+    Does not override already-exported environment variables. Never raises on
+    permission errors; never logs values.
+    """
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return False
+    path = env_path if env_path is not None else repo_root_env_path()
+    if not path.is_file():
+        return False
+    try:
+        load_dotenv(path, override=False)
+    except PermissionError:
+        return False
+    return True
+
+
+def _triplet_missing_keys(key_name: str, secret_name: str, url_name: str) -> tuple[str, ...]:
+    missing: list[str] = []
+    if not _env_nonempty(key_name):
+        missing.append(key_name)
+    if not _env_nonempty(secret_name):
+        missing.append(secret_name)
+    if not _env_nonempty(url_name):
+        missing.append(url_name)
+    return tuple(missing)
+
 
 def _env_nonempty(name: str) -> str | None:
     raw = os.environ.get(name)
@@ -104,6 +147,7 @@ class AlpacaPaperCredentialCheck:
     base_url: str | None
     endpoint_ok: bool
     endpoint_detail: str
+    missing_keys: tuple[str, ...]
     detail: str | None
 
 
@@ -306,6 +350,7 @@ def check_alpaca_paper_credentials(
                     base_url=base_url,
                     endpoint_ok=False,
                     endpoint_detail=endpoint_detail,
+                    missing_keys=(),
                     detail=endpoint_detail,
                 )
             return AlpacaPaperCredentialCheck(
@@ -314,6 +359,7 @@ def check_alpaca_paper_credentials(
                 base_url=normalize_paper_base_url(base_url),
                 endpoint_ok=True,
                 endpoint_detail=endpoint_detail,
+                missing_keys=(),
                 detail=None,
             )
         if key or secret or base_url:
@@ -321,12 +367,14 @@ def check_alpaca_paper_credentials(
                 base_url,
                 require_paper_endpoint=require_paper_endpoint,
             )
+            missing_keys = _triplet_missing_keys(key_name, secret_name, url_name)
             return AlpacaPaperCredentialCheck(
                 credential_status="MISSING",
                 env_pair_label=label,
                 base_url=base_url,
                 endpoint_ok=endpoint_ok,
                 endpoint_detail=endpoint_detail,
+                missing_keys=missing_keys,
                 detail="incomplete_credential_triplet",
             )
     return AlpacaPaperCredentialCheck(
@@ -335,6 +383,7 @@ def check_alpaca_paper_credentials(
         base_url=None,
         endpoint_ok=False,
         endpoint_detail="missing_paper_base_url",
+        missing_keys=_PREFERRED_PAPER_ENV_KEYS,
         detail="no_paper_credential_triplet",
     )
 
@@ -343,6 +392,7 @@ def resolve_alpaca_paper_credentials(
     *,
     require_paper_endpoint: bool = True,
 ) -> AlpacaPaperCredentials | None:
+    load_local_env()
     check = check_alpaca_paper_credentials(require_paper_endpoint=require_paper_endpoint)
     if check.credential_status != "READY" or not check.endpoint_ok:
         return None
@@ -466,6 +516,14 @@ def _alpaca_net_limit_price(structure_type: str, limit_price: float) -> float:
     return abs(limit_price)
 
 
+def _open_position_intent_for_leg_side(side: object) -> object:
+    from alpaca.trading.enums import OrderSide, PositionIntent
+
+    if side == OrderSide.BUY:
+        return PositionIntent.BUY_TO_OPEN
+    return PositionIntent.SELL_TO_OPEN
+
+
 def build_alpaca_mleg_order_request(payload: PaperPayloadCandidate):
     """Map repo payload fields to alpaca-py multileg limit order (adapter only)."""
     from alpaca.trading.enums import OrderClass, OrderSide, OrderType, TimeInForce
@@ -486,15 +544,17 @@ def build_alpaca_mleg_order_request(payload: PaperPayloadCandidate):
             symbol=payload.long_leg_symbol,
             ratio_qty=float(payload.long_leg_qty),
             side=long_side,
+            position_intent=_open_position_intent_for_leg_side(long_side),
         ),
         OptionLegRequest(
             symbol=payload.short_leg_symbol,
             ratio_qty=float(payload.short_leg_qty),
             side=short_side,
+            position_intent=_open_position_intent_for_leg_side(short_side),
         ),
     ]
     return LimitOrderRequest(
-        symbol=payload.symbol,
+        symbol=None,
         qty=float(payload.qty),
         side=_alpaca_parent_side(payload.structure_type),
         type=OrderType.LIMIT,
@@ -504,6 +564,14 @@ def build_alpaca_mleg_order_request(payload: PaperPayloadCandidate):
         limit_price=_alpaca_net_limit_price(payload.structure_type, payload.limit_price),
         client_order_id=deterministic_client_order_id(payload),
     )
+
+
+def sanitize_alpaca_mleg_order_request(request: object) -> dict[str, object]:
+    """JSON-safe broker request preview (no secrets)."""
+    if not hasattr(request, "model_dump"):
+        raise TypeError("expected pydantic order request")
+    raw = request.model_dump(mode="json")
+    return {key: value for key, value in raw.items() if value is not None}
 
 
 def alpaca_order_to_transport_raw(order: object, *, message_prefix: str = "order_submitted") -> dict:

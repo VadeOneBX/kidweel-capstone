@@ -53,6 +53,19 @@ def test_load_paper_transport_results_from_csv(tmp_path: Path) -> None:
     assert loaded[0].previous_status == "pending_new"
 
 
+def test_load_closeout_results_csv_for_status_audit(tmp_path: Path) -> None:
+    csv_path = tmp_path / "closeout.csv"
+    csv_path.write_text(
+        "payload_id,approval_id,original_external_order_id,close_external_order_id,"
+        "close_status,broker_mode,status,submitted_at\n"
+        "p1,a1,open-oid,close-oid,PAPER_CLOSE_SUBMITTED,paper,pending_new,2026-01-01T00:00:00+00:00\n",
+        encoding="utf-8",
+    )
+    loaded = load_paper_transport_results(csv_path)
+    assert len(filter_submitted_transport_rows(loaded)) == 1
+    assert loaded[0].external_order_id == "close-oid"
+
+
 def test_run_audit_uses_injected_get_order_fn(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ALPACA_PAPER_API_KEY", "key")
     monkeypatch.setenv("ALPACA_PAPER_SECRET_KEY", "secret")

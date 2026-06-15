@@ -57,6 +57,8 @@ Optional alias triplet (same rules):
 
 **Fail closed:** live endpoint `https://api.alpaca.markets`, missing URL, or non-canonical paper URL → no submit.
 
+`--env-check` for `env_triplet` loads repo-root `.env` when present (`python-dotenv`, `override=False`). Exported shell variables win. Market-data `ALPACA_API_KEY` / `ALPACA_SECRET_KEY` alone never satisfy paper transport. Env-check prints `missing_keys` names only (no secret values).
+
 ## Transport statuses
 
 - `PAPER_DRY_RUN_READY` — validated ready row, no broker call
@@ -71,12 +73,13 @@ Repo payload fields map to `alpaca-py` `LimitOrderRequest` with `order_class=mle
 
 | Payload field | Alpaca field |
 |---------------|--------------|
-| `symbol` | parent `symbol` (underlying) |
+| (underlying `symbol` in CSV) | **not** sent as parent `symbol` on mleg orders (option legs only) |
 | `qty` | parent `qty` |
 | `order_type=limit` | `OrderType.LIMIT` |
 | `time_in_force=day` | `TimeInForce.DAY` |
+| `order_class=mleg` | `OrderClass.MLEG` |
 | `limit_price` | net `limit_price` (debit: positive; credit structures: negated magnitude) |
-| `long_leg_*` / `short_leg_*` | `OptionLegRequest` legs with `side` + `ratio_qty` |
+| `long_leg_*` / `short_leg_*` | `OptionLegRequest`: `symbol`, `side`, `ratio_qty`, `position_intent` (`buy_to_open` / `sell_to_open`) |
 | Debit spreads | parent `side=BUY` |
 | Credit spreads | parent `side=SELL` |
 
@@ -93,6 +96,16 @@ PYTHONPATH=src python examples/submit_paper_payload_candidates.py \
   --input data/processed/paper_payload_candidates.csv \
   --no-write \
   --limit 5
+```
+
+Sanitized mleg request preview (dry-run safe, no secrets):
+
+```bash
+PYTHONPATH=src python examples/submit_paper_payload_candidates.py \
+  --input data/processed/paper_payload_candidates.csv \
+  --no-write \
+  --limit 1 \
+  --print-request-json
 ```
 
 Env check:

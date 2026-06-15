@@ -11,27 +11,39 @@ from pathlib import Path
 from qops.execution.alpaca_paper_bridge import (
     CANONICAL_PAPER_BASE_URL,
     AuthMode,
+    build_alpaca_mleg_order_request,
     check_alpaca_paper_credentials,
     check_alpaca_profile_cli_credentials,
     effective_transport_limit,
+    filter_ready_payloads,
+    load_local_env,
     load_paper_payload_rows,
     paper_transport_to_dataframe,
     profile_cli_submit_blocked,
     run_paper_payload_transport,
+    sanitize_alpaca_mleg_order_request,
     summarize_paper_transport,
 )
 
 
+def _format_base_url_for_display(base_url: str | None) -> str:
+    if not base_url or not str(base_url).strip():
+        return "no"
+    return base_url
+
+
 def _print_env_triplet_check(*, require_paper_endpoint: bool) -> int:
+    load_local_env()
     check = check_alpaca_paper_credentials(require_paper_endpoint=require_paper_endpoint)
     print("Alpaca paper transport env check (MCP-C12A)")
     print("===========================================")
     print("auth_mode: env_triplet")
     print(f"credential_status: {check.credential_status}")
     print(f"env_pair_label: {check.env_pair_label}")
-    print(f"base_url: {check.base_url}")
+    print(f"base_url: {_format_base_url_for_display(check.base_url)}")
     print(f"endpoint_ok: {check.endpoint_ok}")
     print(f"endpoint_detail: {check.endpoint_detail}")
+    print(f"missing_keys: {list(check.missing_keys)}")
     print(f"canonical_paper_url: {CANONICAL_PAPER_BASE_URL}")
     if check.detail:
         print(f"detail: {check.detail}")
@@ -89,6 +101,11 @@ def main(argv: list[str] | None = None) -> None:
         action=argparse.BooleanOptionalAction,
         default=True,
     )
+    p.add_argument(
+        "--print-request-json",
+        action="store_true",
+        help="Print sanitized Alpaca mleg order JSON for ready rows (no secrets; no submit unless --submit-paper)",
+    )
     ns = p.parse_args(argv)
     auth_mode: AuthMode = ns.auth_mode
 
@@ -116,6 +133,21 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     limit = effective_transport_limit(submit_paper=ns.submit_paper, limit=ns.limit)
+    if ns.print_request_json:
+        ready_preview = filter_ready_payloads(rows)[:limit]
+        for payload in ready_preview:
+            request = build_alpaca_mleg_order_request(payload)
+            print(
+                json.dumps(
+                    {
+                        "payload_id": payload.payload_id,
+                        "structure_type": payload.structure_type,
+                        "broker_request": sanitize_alpaca_mleg_order_request(request),
+                    },
+                    sort_keys=True,
+                )
+            )
+
     results, fatal = run_paper_payload_transport(
         rows,
         submit_paper=ns.submit_paper,
