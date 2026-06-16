@@ -243,6 +243,9 @@ data/*
 .cursor/
 .cursor/rules/
 
+# Claude Code local rules (private; not versioned)
+.claude/rules/
+
 
 /.cursor/rules
 /.cursor/rules
