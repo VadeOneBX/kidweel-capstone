@@ -21,6 +21,7 @@ from qops.execution.alpaca_paper_bridge import (
 )
 from qops.execution.mcp_response import normalize_mcp_response
 from qops.execution.paper_payload_candidate import PaperPayloadCandidate
+from qops.runtime.execution_halt import assert_not_halted
 from qops.execution.paper_position_audit import (
     BrokerPositionSnapshot,
     FilledOrderAuditInput,
@@ -334,7 +335,10 @@ def build_alpaca_close_mleg_order_request(
 def submit_alpaca_paper_close_mleg_order(
     credentials: AlpacaPaperCredentials,
     request: object,
+    *,
+    base_dir: Path | None = None,
 ) -> dict:
+    assert_not_halted(base_dir or Path.cwd())
     endpoint_ok, detail = validate_paper_endpoint(credentials.base_url)
     if not endpoint_ok:
         return transport_error_raw(detail)

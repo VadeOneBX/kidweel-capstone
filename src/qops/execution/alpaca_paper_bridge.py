@@ -15,6 +15,7 @@ import pandas as pd
 
 from qops.execution.mcp_response import normalize_mcp_response
 from qops.execution.paper_payload_candidate import PaperPayloadCandidate, PayloadStatus
+from qops.runtime.execution_halt import assert_not_halted
 from qops.schemas.playbook import AllowedPlaybook
 
 PROVENANCE_TAG = "mcp_c12a_alpaca_paper_bridge"
@@ -601,8 +602,11 @@ def transport_error_raw(message: str) -> dict:
 def submit_alpaca_paper_mleg_order(
     credentials: AlpacaPaperCredentials,
     payload: PaperPayloadCandidate,
+    *,
+    base_dir: Path | None = None,
 ) -> dict:
     """Submit one multileg order to Alpaca paper (network I/O)."""
+    assert_not_halted(base_dir or Path.cwd())
     endpoint_ok, detail = validate_paper_endpoint(credentials.base_url)
     if not endpoint_ok:
         return transport_error_raw(detail)
@@ -653,6 +657,7 @@ def run_paper_payload_transport(
     limit: int | None = None,
     require_paper_endpoint: bool = True,
     submit_fn: PaperMlegSubmitFn | None = None,
+    base_dir: Path | None = None,
 ) -> tuple[list[PaperTransportResult], str | None]:
     """
     Transport ready payloads (dry-run default). Returns (results, fatal_error).
@@ -666,6 +671,8 @@ def run_paper_payload_transport(
     if not submit_paper:
         results.extend(_dry_run_result(p) for p in ready)
         return results, None
+
+    assert_not_halted(base_dir or Path.cwd())
 
     credentials = resolve_alpaca_paper_credentials(require_paper_endpoint=require_paper_endpoint)
     if credentials is None:
