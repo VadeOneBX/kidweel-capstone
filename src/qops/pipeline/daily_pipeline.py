@@ -11,6 +11,7 @@ from qops.backtest.spotgamma_replay_builder import (
 )
 from qops.ingest.spotgamma_normalize import contexts_to_dataframe
 from qops.ingest.staged_intake import load_contexts_from_staged_files, session_date_from_staged_path
+from qops.risk.guard_runner import enrich_morning_candidate_export
 
 _RUN_ID_DATE = re.compile(r"^(\d{4}-\d{2}-\d{2})-")
 
@@ -59,7 +60,11 @@ def run_daily_pipeline(
     contexts_to_dataframe(contexts).to_csv(context_path, index=False)
 
     replay_candidates = build_replay_candidates(contexts)
-    candidates_to_dataframe(replay_candidates).to_csv(candidates_path, index=False)
+    candidate_df = enrich_morning_candidate_export(
+        candidates_to_dataframe(replay_candidates),
+        run_id=run_id,
+    )
+    candidate_df.to_csv(candidates_path, index=False)
 
     return DailyPipelineResult(
         context_artifact=str(context_path),

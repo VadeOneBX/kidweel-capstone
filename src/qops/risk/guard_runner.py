@@ -25,26 +25,99 @@ from qops.schemas.environment import (
 )
 from qops.schemas.playbook import AllowedPlaybook, StructureBias
 
-PROVENANCE_TAG = "guard_c1d_morning_risk_audit"
+PROVENANCE_TAG = "guard_c1e_morning_risk_audit"
 
-RiskClassification = str  # APPROVED_FOR_PAPER_REVIEW | PARKED | REJECTED | INCOMPLETE
+GuardClassification = str
+
+_SPREAD_CONTRACT_COLUMNS = (
+    "structure",
+    "expiration",
+    "dte",
+    "long_leg_symbol",
+    "short_leg_symbol",
+    "long_strike",
+    "short_strike",
+    "debit",
+    "credit",
+    "width",
+    "max_profit",
+    "max_loss",
+    "rr_actual",
+    "pmp",
+    "ev",
+)
+
+_RISK_AUDIT_COLUMNS = (
+    "run_id",
+    "symbol",
+    "underlying",
+    "regime_label",
+    "structure_bias",
+    "playbook",
+    "structure",
+    "expiration",
+    "dte",
+    "long_leg_symbol",
+    "short_leg_symbol",
+    "long_strike",
+    "short_strike",
+    "debit",
+    "credit",
+    "width",
+    "max_profit",
+    "max_loss",
+    "rr_actual",
+    "pmp",
+    "ev",
+    "liquidity_status",
+    "paper_approval_status",
+    "reject_reason",
+    "classification",
+    "provenance",
+)
 
 
 class RiskGuardResult(BaseModel):
     risk_audit_artifact: str
 
 
-@dataclass(frozen=True, slots=True)
-class _ReplayRiskRow:
-    symbol: str
-    trade_date: str
-    source_profile: str
-    structure_bias: str
-    allowed_playbook: str
-    classification: RiskClassification
-    rejection_reason: str
-    has_spy_context: bool
-    missing_fields: str
+def _empty_cell(value: object) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, float) and pd.isna(value):
+        return True
+    if isinstance(value, str) and not value.strip():
+        return True
+    return False
+
+
+def spread_contract_gaps(row: pd.Series) -> list[str]:
+    missing: list[str] = []
+    for col in _SPREAD_CONTRACT_COLUMNS:
+        if col not in row.index or _empty_cell(row.get(col)):
+            missing.append(col)
+    return missing
+
+
+def enrich_morning_candidate_export(df: pd.DataFrame, *, run_id: str) -> pd.DataFrame:
+    """Add risk-guard contract columns to replay candidate exports (spread fields blank)."""
+    if df.empty:
+        out = pd.DataFrame(columns=list(_RISK_AUDIT_COLUMNS))
+        return out
+
+    out = df.copy()
+    out.insert(0, "run_id", run_id)
+    out["underlying"] = out.get("symbol", pd.Series(dtype=str)).astype(str).str.upper()
+    out["regime_label"] = ""
+    out["structure_bias"] = StructureBias.SKIP.value
+    out["playbook"] = AllowedPlaybook.SKIP.value
+    for col in _SPREAD_CONTRACT_COLUMNS:
+        if col not in out.columns:
+            out[col] = ""
+    out["liquidity_status"] = "UNKNOWN"
+    out["paper_approval_status"] = ""
+    out["reject_reason"] = ""
+    return out
 
 
 def _spy_regime_label(context_df: pd.DataFrame, trade_date: str) -> str | None:
@@ -64,23 +137,12 @@ def _spy_regime_label(context_df: pd.DataFrame, trade_date: str) -> str | None:
     return text or None
 
 
-def _classify_replay_candidate(
-    row: pd.Series,
-    *,
-    spy_regime_label: str | None,
-) -> _ReplayRiskRow:
-    symbol = str(row.get("symbol", "")).strip().upper()
-    trade_date = str(row.get("trade_date", "")).strip()
-    source_profile = str(row.get("source_profile", "")).strip()
-    missing_fields = str(row.get("missing_fields", "") or "").strip()
-    has_spy = bool(row.get("has_spy_context"))
-
-    structure_bias = StructureBias.SKIP
+def _playbook_decision_for_row(row: pd.Series):
+    symbol = str(row.get("symbol", "")).strip().upper() or "UNKNOWN"
     gamma = row.get("gamma_ratio")
     gamma_ratio = float(gamma) if gamma is not None and pd.notna(gamma) else None
-
     env = EnvironmentSnapshot(
-        symbol=symbol or "UNKNOWN",
+        symbol=symbol,
         regime_label=RegimeLabel.NEUTRAL,
         confidence=0,
         gamma_ratio=gamma_ratio,
@@ -92,41 +154,160 @@ def _classify_replay_candidate(
         environment_label="morning_replay_staging",
         environment_reason="replay_candidate_not_screened",
     )
-    playbook_decision = select_allowed_playbook(symbol or "UNKNOWN", structure_bias, env)
+    structure_bias = StructureBias.SKIP
+    return select_allowed_playbook(symbol, structure_bias, env)
+
+
+def _map_approval_failure_to_classification(reason: str, failure_reasons: str) -> GuardClassification:
+    blob = f"{reason}|{failure_reasons}".lower()
+    if any(k in blob for k in ("insufficient_reward_risk", "reward_risk", "spread_math_gate")):
+        return "REJECTED_RR"
+    if any(k in blob for k in ("missing_pmp", "pmp_outside", "probability_gate", "ev_gate")):
+        return "REJECTED_PMP"
+    if any(k in blob for k in ("liquidity", "bid", "ask")):
+        return "REJECTED_LIQUIDITY"
+    if "incomplete" in blob or "missing_" in blob:
+        return "REJECTED_MISSING_FIELDS"
+    return "REJECTED_POLICY"
+
+
+@dataclass(frozen=True, slots=True)
+class _ReplayAudit:
+    classification: GuardClassification
+    reject_reason: str
+    structure_bias: str
+    playbook: str
+    regime_label: str
+    spread_gaps: list[str]
+    context_gaps: list[str]
+
+
+def _classify_replay_candidate(
+    row: pd.Series,
+    *,
+    spy_regime_label: str | None,
+) -> _ReplayAudit:
+    symbol = str(row.get("symbol", "")).strip().upper()
+    trade_date = str(row.get("trade_date", "")).strip()
+    context_gaps = [
+        part.strip()
+        for part in str(row.get("missing_fields", "") or "").split(",")
+        if part.strip() and part.strip().lower() != "nan"
+    ]
+    spread_gaps = spread_contract_gaps(row)
+    has_spy = bool(row.get("has_spy_context"))
+
+    playbook_decision = _playbook_decision_for_row(row)
     allowed = playbook_decision.allowed_playbook
+    structure_bias = StructureBias.SKIP.value
+    regime = spy_regime_label or ""
 
-    failures: list[str] = []
     if not symbol:
-        failures.append("missing_symbol")
+        return _ReplayAudit(
+            "REJECTED_MISSING_FIELDS",
+            "context_gate:missing_symbol",
+            structure_bias,
+            allowed.value,
+            regime,
+            spread_gaps,
+            ["missing_symbol"],
+        )
     if not trade_date:
-        failures.append("missing_trade_date")
-    if missing_fields:
-        failures.append("missing_required_fields")
-
-    if failures:
-        classification: RiskClassification = "REJECTED"
-        reason = failures[0]
-    elif allowed == AllowedPlaybook.SKIP:
-        classification = "PARKED"
-        reason = playbook_decision.decision_reason or "structure_resolves_to_skip"
-    elif not has_spy:
-        classification = "PARKED"
-        reason = "missing_spy_context"
-    else:
-        classification = "PARKED"
-        reason = "replay_staging_awaiting_spread_math"
-
-    return _ReplayRiskRow(
-        symbol=symbol,
-        trade_date=trade_date,
-        source_profile=source_profile,
-        structure_bias=structure_bias.value,
-        allowed_playbook=allowed.value,
-        classification=classification,
-        rejection_reason=reason,
-        has_spy_context=has_spy,
-        missing_fields=missing_fields,
+        return _ReplayAudit(
+            "REJECTED_MISSING_FIELDS",
+            "context_gate:missing_trade_date",
+            structure_bias,
+            allowed.value,
+            regime,
+            spread_gaps,
+            ["missing_trade_date"],
+        )
+    if context_gaps:
+        return _ReplayAudit(
+            "REJECTED_MISSING_FIELDS",
+            "context_gate:" + ",".join(context_gaps),
+            structure_bias,
+            allowed.value,
+            regime,
+            spread_gaps,
+            context_gaps,
+        )
+    if spread_gaps:
+        return _ReplayAudit(
+            "REJECTED_MISSING_FIELDS",
+            "spread_economics:" + ",".join(spread_gaps),
+            structure_bias,
+            allowed.value,
+            regime,
+            spread_gaps,
+            [],
+        )
+    if allowed == AllowedPlaybook.SKIP:
+        return _ReplayAudit(
+            "PARKED_REVIEW",
+            playbook_decision.decision_reason or "structure_resolves_to_skip",
+            structure_bias,
+            allowed.value,
+            regime,
+            [],
+            [],
+        )
+    if not has_spy:
+        return _ReplayAudit(
+            "PARKED_REVIEW",
+            "missing_spy_context",
+            structure_bias,
+            allowed.value,
+            regime,
+            [],
+            [],
+        )
+    return _ReplayAudit(
+        "PARKED_REVIEW",
+        "replay_staging_awaiting_spread_math",
+        structure_bias,
+        allowed.value,
+        regime,
+        [],
+        [],
     )
+
+
+def _audit_row_from_series(
+    row: pd.Series,
+    *,
+    run_id: str,
+    audited: _ReplayAudit,
+) -> dict[str, object]:
+    symbol = str(row.get("symbol", "")).strip().upper()
+    return {
+        "run_id": run_id,
+        "symbol": symbol,
+        "underlying": symbol,
+        "regime_label": audited.regime_label,
+        "structure_bias": audited.structure_bias,
+        "playbook": audited.playbook,
+        "structure": row.get("structure", ""),
+        "expiration": row.get("expiration", ""),
+        "dte": row.get("dte", ""),
+        "long_leg_symbol": row.get("long_leg_symbol", ""),
+        "short_leg_symbol": row.get("short_leg_symbol", ""),
+        "long_strike": row.get("long_strike", ""),
+        "short_strike": row.get("short_strike", ""),
+        "debit": row.get("debit", ""),
+        "credit": row.get("credit", ""),
+        "width": row.get("width", ""),
+        "max_profit": row.get("max_profit", ""),
+        "max_loss": row.get("max_loss", ""),
+        "rr_actual": row.get("rr_actual", ""),
+        "pmp": row.get("pmp", ""),
+        "ev": row.get("ev", ""),
+        "liquidity_status": row.get("liquidity_status", "UNKNOWN"),
+        "paper_approval_status": audited.classification,
+        "reject_reason": audited.reject_reason,
+        "classification": audited.classification,
+        "provenance": PROVENANCE_TAG,
+    }
 
 
 def _audit_replay_candidates(
@@ -147,22 +328,9 @@ def _audit_replay_candidates(
         trade_date = str(series.get("trade_date", "")).strip()
         spy_regime = _spy_regime_label(context_df, trade_date)
         audited = _classify_replay_candidate(series, spy_regime_label=spy_regime)
-        rows.append(
-            {
-                "run_id": run_id,
-                "symbol": audited.symbol,
-                "trade_date": audited.trade_date,
-                "source_profile": audited.source_profile,
-                "structure_bias": audited.structure_bias,
-                "allowed_playbook": audited.allowed_playbook,
-                "classification": audited.classification,
-                "rejection_reason": audited.rejection_reason,
-                "has_spy_context": audited.has_spy_context,
-                "missing_fields": audited.missing_fields,
-                "regime_label": spy_regime or "",
-                "provenance": PROVENANCE_TAG,
-            }
-        )
+        rows.append(_audit_row_from_series(series, run_id=run_id, audited=audited))
+    if not rows:
+        return pd.DataFrame(columns=list(_RISK_AUDIT_COLUMNS))
     return pd.DataFrame(rows)
 
 
@@ -175,12 +343,63 @@ def _audit_spread_candidates(
     approvals = build_paper_approval_candidates(spread_rows)
     base = paper_approval_to_dataframe(approvals)
     if base.empty:
-        return base.assign(run_id=run_id, classification="", provenance=PROVENANCE_TAG)
+        return pd.DataFrame(columns=list(_RISK_AUDIT_COLUMNS))
 
-    base = base.rename(columns={"approval_status": "classification", "approval_reason": "rejection_reason"})
-    base.insert(0, "run_id", run_id)
-    base["provenance"] = PROVENANCE_TAG
-    return base
+    rows: list[dict[str, object]] = []
+    for _, series in base.iterrows():
+        approval_status = str(series.get("approval_status", "")).strip()
+        reason = str(series.get("approval_reason", "")).strip()
+        failures = str(series.get("failure_reasons", "")).strip()
+        if approval_status == "APPROVED_FOR_PAPER_REVIEW":
+            classification: GuardClassification = "APPROVED_PAPER"
+            reject_reason = ""
+        elif approval_status == "INCOMPLETE":
+            classification = "REJECTED_MISSING_FIELDS"
+            reject_reason = reason or "incomplete_required_fields"
+        else:
+            classification = _map_approval_failure_to_classification(reason, failures)
+            reject_reason = reason or failures
+
+        net = series.get("net_debit_or_credit")
+        debit = ""
+        credit = ""
+        if net is not None and pd.notna(net):
+            if float(net) >= 0:
+                debit = net
+            else:
+                credit = abs(float(net))
+
+        rows.append(
+            {
+                "run_id": run_id,
+                "symbol": series.get("symbol", ""),
+                "underlying": series.get("symbol", ""),
+                "regime_label": "",
+                "structure_bias": StructureBias.SKIP.value,
+                "playbook": series.get("structure_type", ""),
+                "structure": series.get("structure_type", ""),
+                "expiration": series.get("expiration", ""),
+                "dte": "",
+                "long_leg_symbol": series.get("long_leg_symbol", ""),
+                "short_leg_symbol": series.get("short_leg_symbol", ""),
+                "long_strike": "",
+                "short_strike": "",
+                "debit": debit,
+                "credit": credit,
+                "width": series.get("spread_width", ""),
+                "max_profit": series.get("max_profit", ""),
+                "max_loss": series.get("max_loss", ""),
+                "rr_actual": series.get("reward_risk", ""),
+                "pmp": series.get("pmp", ""),
+                "ev": series.get("expected_value", ""),
+                "liquidity_status": series.get("bid_ask_quality", "UNKNOWN"),
+                "paper_approval_status": approval_status,
+                "reject_reason": reject_reason,
+                "classification": classification,
+                "provenance": PROVENANCE_TAG,
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 def _is_spread_candidate_csv(path: Path) -> bool:
@@ -235,12 +454,37 @@ def summarize_risk_audit(path: str | Path) -> dict[str, object]:
 
     col = "classification" if "classification" in df.columns else "approval_status"
     counts = Counter(str(v) for v in df[col].fillna(""))
-    reasons = Counter(str(v) for v in df.get("rejection_reason", pd.Series(dtype=str)).fillna("") if str(v))
 
-    parked = counts.get("PARKED", 0)
-    approved = counts.get("APPROVED_FOR_PAPER_REVIEW", 0)
-    rejected = counts.get("REJECTED", 0)
+    approved = counts.get("APPROVED_PAPER", 0) + counts.get("APPROVED_FOR_PAPER_REVIEW", 0)
+    parked = counts.get("PARKED_REVIEW", 0) + counts.get("PARKED", 0)
+    rejected_missing = counts.get("REJECTED_MISSING_FIELDS", 0)
+    rejected_rr = counts.get("REJECTED_RR", 0)
+    rejected_pmp = counts.get("REJECTED_PMP", 0)
+    rejected_liquidity = counts.get("REJECTED_LIQUIDITY", 0)
+    rejected_policy = counts.get("REJECTED_POLICY", 0)
+    rejected_legacy = counts.get("REJECTED", 0)
     incomplete = counts.get("INCOMPLETE", 0)
+
+    rejected = (
+        rejected_missing
+        + rejected_rr
+        + rejected_pmp
+        + rejected_liquidity
+        + rejected_policy
+        + rejected_legacy
+        + incomplete
+    )
+
+    reasons = Counter(
+        str(v)
+        for v in df.get("reject_reason", df.get("rejection_reason", pd.Series(dtype=str))).fillna("")
+        if str(v)
+    )
+    spread_economics_rejects = sum(
+        1
+        for v in df.get("reject_reason", pd.Series(dtype=str)).fillna("")
+        if str(v).startswith("spread_economics:")
+    )
 
     regime = ""
     if "regime_label" in df.columns:
@@ -260,6 +504,12 @@ def summarize_risk_audit(path: str | Path) -> dict[str, object]:
         "parked": parked,
         "rejected": rejected,
         "incomplete": incomplete,
+        "rejected_missing_fields": rejected_missing,
+        "rejected_rr": rejected_rr,
+        "rejected_pmp": rejected_pmp,
+        "rejected_liquidity": rejected_liquidity,
+        "rejected_policy": rejected_policy,
+        "rejected_spread_economics": spread_economics_rejects,
         "top_rejection_reasons": top_reasons,
         "regime_label": regime,
         "structure_bias": structure_bias,

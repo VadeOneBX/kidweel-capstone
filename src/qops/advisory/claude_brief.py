@@ -56,9 +56,13 @@ Mode: `{manifest.mode}`
 
 - Total candidates: {summary.get("total_candidates", 0)}
 - Approved (paper-only review): {summary.get("approved_paper_only", 0)}
-- Parked: {summary.get("parked", 0)}
-- Rejected: {summary.get("rejected", 0)}
-- Incomplete: {summary.get("incomplete", 0)}
+- Parked for review: {summary.get("parked", 0)}
+- Rejected (missing spread/context fields): {summary.get("rejected_missing_fields", 0)}
+- Rejected (reward/risk): {summary.get("rejected_rr", 0)}
+- Rejected (PMP / probability): {summary.get("rejected_pmp", 0)}
+- Rejected (liquidity): {summary.get("rejected_liquidity", 0)}
+- Rejected (policy): {summary.get("rejected_policy", 0)}
+- Rejected (total): {summary.get("rejected", 0)}
 
 ### Top rejection reasons
 
@@ -78,7 +82,9 @@ Mode: `{manifest.mode}`
 
 Market context has been established from deterministic ingestion artifacts.
 
-The risk guard classified the proposal set.
+The risk guard classified the candidate set.
+
+The operator reviews the audit artifact paths below.
 
 No live execution path was enabled.
 
