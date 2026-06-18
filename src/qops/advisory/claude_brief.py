@@ -4,11 +4,18 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from qops.risk.guard_runner import summarize_risk_audit
 from qops.runtime.orb_manifest import OrbRunManifest
 
 
 class ClaudeBriefResult(BaseModel):
     advisory_artifact: str
+
+
+def _format_reasons(reasons: list[str]) -> str:
+    if not reasons:
+        return "- (none recorded)"
+    return "\n".join(f"- `{reason}`" for reason in reasons)
 
 
 def generate_claude_brief(
@@ -24,6 +31,8 @@ def generate_claude_brief(
     missing = [p for p in required if not p or not Path(p).exists()]
     if missing:
         raise RuntimeError(f"ADVISORY_BLOCKED_MISSING_ARTIFACTS:{missing}")
+
+    summary = summarize_risk_audit(manifest.risk_audit_artifact or "")
 
     advisory_dir = base_dir / "data/advisory"
     advisory_dir.mkdir(parents=True, exist_ok=True)
@@ -43,11 +52,22 @@ Mode: `{manifest.mode}`
 - Files staged: {manifest.files_staged}
 - Files rejected: {manifest.files_rejected}
 
-## Artifacts
+## Risk classification (from artifacts)
 
-- Context: `{manifest.context_artifact}`
-- Candidates: `{manifest.candidates_artifact}`
-- Risk audit: `{manifest.risk_audit_artifact}`
+- Total candidates: {summary.get("total_candidates", 0)}
+- Approved (paper-only review): {summary.get("approved_paper_only", 0)}
+- Parked: {summary.get("parked", 0)}
+- Rejected: {summary.get("rejected", 0)}
+- Incomplete: {summary.get("incomplete", 0)}
+
+### Top rejection reasons
+
+{_format_reasons(list(summary.get("top_rejection_reasons", [])))}
+
+### Context fields (artifact-sourced)
+
+- Regime label: `{summary.get("regime_label", "")}`
+- Structure bias: `{summary.get("structure_bias", "")}`
 
 ## Guardrails
 
@@ -58,9 +78,15 @@ Mode: `{manifest.mode}`
 
 Market context has been established from deterministic ingestion artifacts.
 
-Candidate proposals and risk classification are available for operator review.
+The risk guard classified the proposal set.
 
 No live execution path was enabled.
+
+## Artifact paths
+
+- Context: `{manifest.context_artifact}`
+- Candidates: `{manifest.candidates_artifact}`
+- Risk audit: `{manifest.risk_audit_artifact}`
 """
 
     advisory_path.write_text(body, encoding="utf-8")
