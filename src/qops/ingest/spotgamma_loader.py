@@ -119,7 +119,11 @@ def detect_csv_profile(columns: list[object]) -> ExportProfile | None:
 
 
 def is_spy_excel_filename(path: str | Path) -> bool:
-    return Path(path).name.lower() in _SPY_EXCEL_FILENAMES
+    name = Path(path).name.lower()
+    if name in _SPY_EXCEL_FILENAMES:
+        return True
+    stem = Path(path).stem.lower()
+    return stem in {"spx", "spy"} or stem.endswith("_spx") or stem.endswith("_spy")
 
 
 def detect_spy_excel_profile(columns: list[object]) -> bool:

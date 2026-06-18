@@ -36,6 +36,7 @@ class OrbRunManifest(BaseModel):
     staged_files: list[str] = Field(default_factory=list)
     rejected_files: list[str] = Field(default_factory=list)
     rejection_reasons: dict[str, str] = Field(default_factory=dict)
+    source_to_staged: dict[str, str] = Field(default_factory=dict)
 
     context_artifact: str | None = None
     candidates_artifact: str | None = None
@@ -45,21 +46,43 @@ class OrbRunManifest(BaseModel):
 
     live_mode_enabled: bool = False
     broker_mutation_occurred: bool = False
+    notification_sent: bool = False
 
     errors: list[str] = Field(default_factory=list)
 
 
 def manifest_path(base_dir: Path, run_date: str) -> Path:
+    """Latest manifest for a calendar run date (overwritten each wake on that date)."""
     return base_dir / "data" / "runs" / run_date / "orb_manifest.json"
 
 
+def immutable_manifest_path(base_dir: Path, run_date: str, run_id: str) -> Path:
+    """Immutable manifest snapshot for one run_id."""
+    return base_dir / "data" / "runs" / run_date / f"{run_id}_orb_manifest.json"
+
+
+def append_scheduler_log(base_dir: Path, message: str) -> None:
+    log_path = base_dir / "logs" / "ingestion_scheduler.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("a", encoding="utf-8") as handle:
+        handle.write(message.rstrip() + "\n")
+
+
 def write_manifest(base_dir: Path, manifest: OrbRunManifest) -> Path:
-    path = manifest_path(base_dir, manifest.run_date)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
-    return path
+    payload = manifest.model_dump_json(indent=2)
+    latest = manifest_path(base_dir, manifest.run_date)
+    immutable = immutable_manifest_path(base_dir, manifest.run_date, manifest.run_id)
+    latest.parent.mkdir(parents=True, exist_ok=True)
+    latest.write_text(payload, encoding="utf-8")
+    immutable.write_text(payload, encoding="utf-8")
+    return latest
 
 
 def read_manifest(base_dir: Path, run_date: str) -> OrbRunManifest:
     path = manifest_path(base_dir, run_date)
+    return OrbRunManifest.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+def read_manifest_by_run_id(base_dir: Path, run_date: str, run_id: str) -> OrbRunManifest:
+    path = immutable_manifest_path(base_dir, run_date, run_id)
     return OrbRunManifest.model_validate_json(path.read_text(encoding="utf-8"))

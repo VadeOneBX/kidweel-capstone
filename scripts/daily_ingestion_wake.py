@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from qops.ingest.ingestion_wake import run_ingestion_wake
+from qops.runtime.orb_manifest import append_scheduler_log
 
 
 def parse_args() -> argparse.Namespace:
@@ -47,6 +48,13 @@ def main() -> int:
         mode=args.mode,
         dry_run=args.dry_run,
     )
+
+    append_scheduler_log(base_dir, f"RUN_STARTED run_id={manifest.run_id}")
+    append_scheduler_log(base_dir, f"WAKE_COMPLETE status={manifest.status}")
+    append_scheduler_log(base_dir, f"FILES_FOUND count={manifest.files_found}")
+    append_scheduler_log(base_dir, f"FILES_STAGED count={manifest.files_staged}")
+    append_scheduler_log(base_dir, f"FILES_REJECTED count={manifest.files_rejected}")
+    append_scheduler_log(base_dir, f"RUN_COMPLETE status={manifest.status}")
 
     print(manifest.model_dump_json(indent=2))
     return 0

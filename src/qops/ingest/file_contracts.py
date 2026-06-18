@@ -6,6 +6,17 @@ from pathlib import Path
 
 ALLOWED_SUFFIXES = {".csv", ".xlsx", ".xls"}
 
+CANONICAL_PACKET_STEMS = frozenset(
+    {
+        "morning_regime",
+        "spx",
+        "reverse-vrp",
+        "reverse_vrp",
+        "squeeze",
+        "vrp",
+    }
+)
+
 ACCEPTED_NAME_PATTERNS = [
     re.compile(r"^morning[_-]?regime.*", re.IGNORECASE),
     re.compile(r"^regime.*", re.IGNORECASE),
@@ -33,6 +44,16 @@ def evaluate_ingestion_file(path: Path, run_date: str) -> FileContractResult:
     stem = path.stem.strip()
     if not stem:
         return FileContractResult(False, "EMPTY_STEM")
+
+    stem_lower = stem.lower()
+    if stem_lower in CANONICAL_PACKET_STEMS:
+        canonical_stem = stem_lower.replace("-", "_")
+        normalized_name = f"{run_date}_{canonical_stem}{suffix}"
+        return FileContractResult(
+            accepted=True,
+            reason="ACCEPTED_CANONICAL_PACKET_FILE",
+            normalized_name=normalized_name,
+        )
 
     matched = any(pattern.match(stem) for pattern in ACCEPTED_NAME_PATTERNS)
     if not matched:
