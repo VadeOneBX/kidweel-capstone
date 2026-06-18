@@ -8,30 +8,40 @@ import pytest
 
 from qops.ingest.file_contracts import evaluate_ingestion_file
 from qops.ingest.ingestion_wake import run_ingestion_wake
-from qops.runtime.orb_manifest import manifest_path, read_manifest
+from qops.runtime.orb_manifest import manifest_path, read_manifest, read_manifest_by_run_id, immutable_manifest_path
 
 
 @pytest.mark.parametrize(
-    "name,accepted",
+    "name,accepted,normalized_suffix",
     [
-        ("morning_regime_2026-06-16.xlsx", True),
-        ("spotgamma_morning_2026-06-16.csv", True),
-        ("SG_morning.xlsx", True),
-        ("regime_scan.csv", True),
-        ("sg_20260616.xlsx", True),
-        ("notes.txt", False),
-        ("screenshot.png", False),
-        ("unknown_file.json", False),
+        ("morning_regime_2026-06-16.xlsx", True, None),
+        ("spotgamma_morning_2026-06-16.csv", True, None),
+        ("SG_morning.xlsx", True, None),
+        ("regime_scan.csv", True, None),
+        ("sg_20260616.xlsx", True, None),
+        ("morning_regime.xlsx", True, "2026-06-16_morning_regime.xlsx"),
+        ("SPX.xlsx", True, "2026-06-18_spx.xlsx"),
+        ("reverse-vrp.xlsx", True, "2026-06-18_reverse_vrp.xlsx"),
+        ("squeeze.xlsx", True, "2026-06-18_squeeze.xlsx"),
+        ("vrp.xlsx", True, "2026-06-18_vrp.xlsx"),
+        ("notes.txt", False, None),
+        ("screenshot.png", False, None),
+        ("unknown_file.json", False, None),
     ],
 )
-def test_evaluate_ingestion_file(tmp_path: Path, name: str, accepted: bool) -> None:
+def test_evaluate_ingestion_file(
+    tmp_path: Path, name: str, accepted: bool, normalized_suffix: str | None
+) -> None:
     path = tmp_path / name
     path.write_text("x", encoding="utf-8")
-    result = evaluate_ingestion_file(path, run_date="2026-06-16")
+    run_date = "2026-06-18" if normalized_suffix and normalized_suffix.startswith("2026-06-18") else "2026-06-16"
+    result = evaluate_ingestion_file(path, run_date=run_date)
     assert result.accepted is accepted
-    if accepted:
+    if accepted and normalized_suffix:
+        assert result.normalized_name == normalized_suffix
+    elif accepted:
         assert result.normalized_name is not None
-        assert result.normalized_name.startswith("2026-06-16_")
+        assert result.normalized_name.startswith(f"{run_date}_")
 
 
 def test_ingestion_wake_stages_and_rejects(tmp_path: Path) -> None:
@@ -53,8 +63,30 @@ def test_ingestion_wake_stages_and_rejects(tmp_path: Path) -> None:
     )
     assert len(staged) == 1
     assert manifest_path(tmp_path, manifest.run_date).exists()
+    assert immutable_manifest_path(tmp_path, manifest.run_date, manifest.run_id).exists()
     roundtrip = read_manifest(tmp_path, manifest.run_date)
     assert roundtrip.run_id == manifest.run_id
+
+
+def test_raw_session_copy_to_staging_preserves_archive(tmp_path: Path) -> None:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    run_date = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
+    raw_dir = tmp_path / "data/spotgamma/raw" / run_date
+    raw_dir.mkdir(parents=True)
+    (raw_dir / "squeeze.xlsx").write_text("x", encoding="utf-8")
+    (raw_dir / "junk.txt").write_text("nope", encoding="utf-8")
+
+    manifest = run_ingestion_wake(tmp_path, mode="manual", dry_run=False)
+
+    assert (raw_dir / "squeeze.xlsx").is_file()
+    assert (raw_dir / "junk.txt").is_file()
+    staged = list((tmp_path / "data/spotgamma/staging").glob(f"{run_date}_squeeze.xlsx"))
+    assert len(staged) == 1
+    source = str((raw_dir / "squeeze.xlsx").resolve())
+    assert manifest.source_to_staged[source] == str(staged[0].resolve())
+    assert manifest.rejection_reasons[str((raw_dir / "junk.txt").resolve())]
 
 
 def test_ingestion_wake_no_files_writes_manifest(tmp_path: Path) -> None:

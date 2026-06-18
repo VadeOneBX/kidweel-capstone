@@ -22,7 +22,9 @@ from qops.ingest.spotgamma_normalize import (
 
 def test_spy_excel_filename_detection() -> None:
     assert is_spy_excel_filename("SPY.xlsx")
+    assert is_spy_excel_filename("SPX.xlsx")
     assert is_spy_excel_filename(Path("data/raw/2026-06-12/spy.xlsx"))
+    assert is_spy_excel_filename("2026-06-18_spx.xlsx")
     assert not is_spy_excel_filename("squeeze.xlsx")
 
 
