@@ -257,3 +257,7 @@ model.joblib
 
 /June26 Kidweel Survivability.docx
 
+
+# Local MCP configs with secrets
+.cursor/mcp.json
+.claude/settings.json

@@ -1,41 +1,19 @@
-# MCP-C1A Claude MCP reconciliation
+# MCP-C1A (retired)
 
-This packet adds a repo-local operator script to reconcile Claude MCP config with the canonical repo source at `.cursor/mcp.json`.
+MCP-C1A proposed copying Cursor MCP config into `.claude/settings.json`. That path is **retired**:
 
-## Scope
+- Cursor project MCP was never the Claude source of truth here.
+- Copying can **overwrite** an existing Claude config that already uses `${VAR}` env references.
+- It does not diagnose failures after `source .venv/bin/activate && claude`.
 
-- Repo tooling only
-- No execution-path changes
-- No gate/schema/transport behavior changes
+## Use instead
 
-## Files
-
-- `scripts/reconcile_claude_mcp.sh`
-- `docs/mcp_c1a_claude_reconciliation.md`
-
-## Operator run (repo root)
+**MCP-C1C** — read-only diagnostic:
 
 ```bash
-bash scripts/reconcile_claude_mcp.sh
+bash scripts/diagnose_claude_mcp.sh
 ```
 
-## What the script does
+Documentation: [mcp_c1c_claude_mcp_diagnostic.md](mcp_c1c_claude_mcp_diagnostic.md)
 
-1. Resolves and prints repo root.
-2. Prints whether `claude` command exists.
-3. Prints whether `CLAUDE.md`, `AGENTS.md`, `.claude/agents`, and `.claude/settings.json` exist.
-4. Requires `.cursor/mcp.json`.
-5. Copies `.cursor/mcp.json` to `.claude/settings.json`.
-6. Fails if inline credential-like Alpaca content is detected in `.claude/settings.json`.
-7. Runs `claude /doctor` when available, or surfaces that `claude` is missing.
-8. Prints manual Claude smoke-test commands:
-   - `/status`
-   - `/agents`
-   - `/mcp`
-   - `safety-auditor` review of `CLAUDE.md`, `AGENTS.md`, and `.claude/settings.json`
-
-## Verification notes
-
-- Script is runnable from repo root via `bash`.
-- Script is idempotent for repeated reconciliation.
-- Script only updates `.claude/settings.json` from `.cursor/mcp.json`.
+`scripts/reconcile_claude_mcp.sh` remains as a thin wrapper that runs the C1C diagnostic and does not copy or write MCP config.
