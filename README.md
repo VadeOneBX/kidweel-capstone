@@ -4,6 +4,8 @@
 
 Claude proposes. The system decides. Transport executes.
 
+**Trinity (portable narrative):** (1) **Deterministic decision system** — context, spread construction, EV/RR/PMP gates, and audit artifacts; (2) **Paper-only execution guardrails** — dry-run default, explicit opt-in submit, no live endpoint; (3) **Portable evidence narrative** — replay candidates, gate outcomes, and transport status where applicable, readable on GitHub, in interviews, and in portfolio copy. Built to **reject weak decisions, not force trades**; **`SKIP` / do nothing is a first-class output**.
+
 ---
 
 ## 1. Project Thesis
@@ -29,7 +31,7 @@ SpotGamma-derived context is used to describe dealer positioning, volatility reg
 
 ---
 
-## 3. Architecture Flow
+## 3. Architecture and decision flow
 
 Canonical path (implemented modules and scripts; not every stage runs in every entrypoint):
 
@@ -98,6 +100,8 @@ Legacy or scaffolded backtesting utilities are retained only where useful for in
 
 Research-only Claude overlay comparisons: [docs/claude-backtest-wiring.md](./docs/claude-backtest-wiring.md), [docs/findings-c13-claude-context.md](./docs/findings-c13-claude-context.md).
 
+**Evidence status (canonical vs mock):** [docs/backtest_evidence_status.md](./docs/backtest_evidence_status.md).
+
 ---
 
 ## 6. Paper-Only Guardrails
@@ -135,7 +139,19 @@ Operator commands: [docs/operator_commands.md](./docs/operator_commands.md).
 - Not unrestricted order submission—no blind auth retry, no assistant with cancel/replace authority.
 - Not proof that mock backtest memos or placeholder metrics represent real PnL.
 
-It **is** paper-only decision infrastructure with deterministic guardrails, source-grounded context, spread economics, audit trail, and explicit candidate review before any paper transport.
+It **is** a **decision system** for **risk-defined options workflows**: paper-only path, **deterministic gates**, **evidence trail**, and explicit candidate review before any paper transport.
+
+---
+
+## 9. Public readiness and license
+
+This repository is capstone / portfolio work, not a production trading product. **Paper-only** posture and **dry-run** defaults are binding. **No MIT** or other permissive default license is checked in.
+
+- **Rights:** [NOTICE](./NOTICE) — all rights reserved unless a future governance packet adds explicit terms.
+- **Viewer guide:** [docs/public_readiness.md](./docs/public_readiness.md).
+- **Helper inventory (no deletions):** [docs/repo_classification_C1.md](./docs/repo_classification_C1.md).
+
+Before sharing artifacts externally, run the privacy grep in [docs/claude_code_access_runbook.md](./docs/claude_code_access_runbook.md).
 
 ---
 
@@ -145,6 +161,9 @@ It **is** paper-only decision infrastructure with deterministic guardrails, sour
 |------|-----|
 | System identity & structure policy | [docs/system-identity.md](./docs/system-identity.md) |
 | Evidence map | [docs/evidence_artifacts_guide.md](./docs/evidence_artifacts_guide.md) |
+| Backtest / replay evidence status | [docs/backtest_evidence_status.md](./docs/backtest_evidence_status.md) |
+| Public readiness | [docs/public_readiness.md](./docs/public_readiness.md) |
+| Repo classification (CLEAN-C1) | [docs/repo_classification_C1.md](./docs/repo_classification_C1.md) |
 | Morning artifact checklist | [docs/artifact_inspection_checklist.md](./docs/artifact_inspection_checklist.md) |
 | Subagent governance | [docs/subagent-governance.md](./docs/subagent-governance.md) |
 | Claude advisor (proposal only) | [docs/claude-advisor-context.md](./docs/claude-advisor-context.md) |
