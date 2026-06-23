@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pandas as pd
 from pydantic import BaseModel
 
+from qops.pipeline.alpaca_hydration_loop import summarize_expression_artifact
 from qops.risk.guard_runner import summarize_risk_audit
 from qops.runtime.orb_manifest import OrbRunManifest
 
@@ -33,6 +35,17 @@ def generate_claude_brief(
         raise RuntimeError(f"ADVISORY_BLOCKED_MISSING_ARTIFACTS:{missing}")
 
     summary = summarize_risk_audit(manifest.risk_audit_artifact or "")
+    expressions_path = Path(manifest.expressions_artifact or "")
+    if not expressions_path.is_file() and manifest.run_id:
+        from qops.pipeline.alpaca_hydration_loop import expressions_artifact_path
+
+        expressions_path = expressions_artifact_path(base_dir, manifest.run_id)
+    expr_summary: dict[str, int] = {}
+    if expressions_path.is_file():
+        expr_df = pd.read_csv(expressions_path)
+        if manifest.run_id and "run_id" in expr_df.columns:
+            expr_df = expr_df[expr_df["run_id"].astype(str) == str(manifest.run_id)]
+        expr_summary = summarize_expression_artifact(expr_df)
 
     advisory_dir = base_dir / "data/advisory"
     advisory_dir.mkdir(parents=True, exist_ok=True)
@@ -57,14 +70,35 @@ Mode: `{manifest.mode}`
 - Total candidates: {summary.get("total_candidates", 0)}
 - Approved (paper-only review): {summary.get("approved_paper_only", 0)}
 - Parked for review: {summary.get("parked", 0)}
-- Rejected (missing spread/context fields): {summary.get("rejected_missing_fields", 0)}
-- Rejected (reward/risk): {summary.get("rejected_rr", 0)}
-- Rejected (PMP / probability): {summary.get("rejected_pmp", 0)}
-- Rejected (liquidity): {summary.get("rejected_liquidity", 0)}
-- Rejected (policy): {summary.get("rejected_policy", 0)}
-- Rejected (total): {summary.get("rejected", 0)}
+- Reverse-vrp symbol context rows: {summary.get("reverse_vrp_symbol_context_rows", 0)}
+- Context gate rejects: {summary.get("context_gate_rejects", 0)}
+- SPY backdrop absent (advisory only): {summary.get("spy_backdrop_absent", 0)}
+- Context gamma source absent (VRP-only, not a spread reject): {summary.get("context_gamma_source_absent", 0)}
 
-### Top rejection reasons
+## Hydration loop (capability lanes, not new agents)
+
+- Hydration pending: {summary.get("hydration_pending", 0)}
+- Parked data gap: {summary.get("parked_data_gap", 0)}
+- No viable expression: {summary.get("no_viable_expression", 0)}
+- Primary expression selected: {summary.get("primary_expression_selected", 0)}
+- Watch expression available: {summary.get("watch_expression_available", 0)}
+- Watch operator review pending: {summary.get("watch_operator_review", 0)}
+- Watch operator approved: {summary.get("watch_operator_approved", 0)}
+- Watch operator rejected: {summary.get("watch_operator_rejected", 0)}
+- Alternates available: {summary.get("alternates_available", 0)}
+- Hydration expressions attempted: {summary.get("hydration_expressions_attempted", 0)}
+- Expression count (total): {expr_summary.get("expression_count_total", 0)}
+- Primary expressions: {expr_summary.get("primary_expression_count", 0)}
+- Alternate expressions: {expr_summary.get("alternate_expression_count", 0)}
+- Watch expressions: {expr_summary.get("watch_expression_count", 0)}
+- Failed expressions: {expr_summary.get("failed_expression_count", 0)}
+- Dealer tier A: {expr_summary.get("dealer_tier_a", 0)}
+- Dealer tier B: {expr_summary.get("dealer_tier_b", 0)}
+- Dealer tier C: {expr_summary.get("dealer_tier_c", 0)}
+- Dealer tier D: {expr_summary.get("dealer_tier_d", 0)}
+- Dealer tier E: {expr_summary.get("dealer_tier_e", 0)}
+
+### Top loop / context reasons
 
 {_format_reasons(list(summary.get("top_rejection_reasons", [])))}
 
@@ -92,6 +126,7 @@ No live execution path was enabled.
 
 - Context: `{manifest.context_artifact}`
 - Candidates: `{manifest.candidates_artifact}`
+- Expressions: `{manifest.expressions_artifact}`
 - Risk audit: `{manifest.risk_audit_artifact}`
 """
 

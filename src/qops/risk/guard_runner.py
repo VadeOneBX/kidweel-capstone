@@ -23,11 +23,19 @@ from qops.schemas.environment import (
     SkewState,
     WallState,
 )
+from qops.pipeline.alpaca_hydration_loop import C2A_EVIDENCE_COLUMNS
+from qops.schemas.candidate_loop import CandidateLoopStatus, HydrationStatus
 from qops.schemas.playbook import AllowedPlaybook, StructureBias
 
-PROVENANCE_TAG = "guard_c1e_morning_risk_audit"
+PROVENANCE_TAG = "guard_c1f_morning_risk_audit"
 
 GuardClassification = str
+
+_VRP_SCANNER_PROFILES = frozenset({"vrp", "reverse_vrp"})
+
+_CONTEXT_GATE_PASS = "CONTEXT_PASS"
+_CONTEXT_GATE_BLOCKED = "CONTEXT_BLOCKED"
+_CONTEXT_GATE_INCOMPLETE = "CONTEXT_INCOMPLETE"
 
 _SPREAD_CONTRACT_COLUMNS = (
     "structure",
@@ -72,9 +80,10 @@ _RISK_AUDIT_COLUMNS = (
     "liquidity_status",
     "paper_approval_status",
     "reject_reason",
+    "gamma_ratio_source",
     "classification",
     "provenance",
-)
+) + C2A_EVIDENCE_COLUMNS
 
 
 class RiskGuardResult(BaseModel):
@@ -117,6 +126,134 @@ def enrich_morning_candidate_export(df: pd.DataFrame, *, run_id: str) -> pd.Data
     out["liquidity_status"] = "UNKNOWN"
     out["paper_approval_status"] = ""
     out["reject_reason"] = ""
+    if "gamma_ratio_source" not in out.columns:
+        out["gamma_ratio_source"] = ""
+    for col in C2A_EVIDENCE_COLUMNS:
+        if col not in out.columns:
+            out[col] = ""
+        if col == "candidate_loop_status":
+            out[col] = CandidateLoopStatus.HYDRATION_PENDING.value
+        elif col == "hydration_status":
+            out[col] = HydrationStatus.REQUERY_REQUIRED.value
+        elif col in ("expression_count", "alternate_expression_count"):
+            out[col] = 0
+        elif col in (
+            "rr_baseline_required",
+            "rr_dealer_required",
+            "pmp_baseline_max",
+            "pmp_dealer_max",
+        ):
+            out[col] = ""
+        elif col in ("context_gate_status", "context_gate_reason"):
+            out[col] = ""
+        elif col in ("primary_expression_id", "watch_expression_id"):
+            out[col] = ""
+    return out
+
+
+def _context_gate_labels(
+    *,
+    profile: str,
+    missing_fields: str,
+    has_spy_context: bool,
+) -> tuple[str, str]:
+    gaps = [
+        part.strip()
+        for part in missing_fields.split(",")
+        if part.strip() and part.strip().lower() != "nan"
+    ]
+    if profile == "reverse_vrp":
+        gaps = [g for g in gaps if g != "spy_context"]
+    if gaps:
+        return _CONTEXT_GATE_INCOMPLETE, ",".join(gaps)
+    if profile == "reverse_vrp" and not has_spy_context:
+        return _CONTEXT_GATE_PASS, "missing_spy_context"
+    return _CONTEXT_GATE_PASS, ""
+
+
+def hydrate_morning_replay_candidates(
+    df: pd.DataFrame,
+    context_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """C1f slice 1: SPY backdrop regime + squeeze→VRP gamma join (no SPX→single-name inference)."""
+    if df.empty:
+        return df
+
+    out = df.copy()
+    regime_by_date: dict[str, str] = {}
+    for trade_date in out.get("trade_date", pd.Series(dtype=str)).dropna().unique():
+        td = str(trade_date).strip()
+        label = _spy_regime_label(context_df, td)
+        if label:
+            regime_by_date[td] = label
+
+    squeeze_gamma: dict[str, float] = {}
+    if "source_profile" in out.columns and "symbol" in out.columns:
+        squeeze_mask = out["source_profile"].astype(str) == "squeeze"
+        for _, squeeze_row in out.loc[squeeze_mask].iterrows():
+            gamma = squeeze_row.get("gamma_ratio")
+            if gamma is None or pd.isna(gamma):
+                continue
+            sym = str(squeeze_row.get("symbol", "")).strip().upper()
+            if sym:
+                squeeze_gamma[sym] = float(gamma)
+
+    gamma_values: list[object] = []
+    sources: list[str] = []
+    regimes: list[str] = []
+    missing_fields: list[str] = []
+    gate_statuses: list[str] = []
+    gate_reasons: list[str] = []
+
+    for _, row in out.iterrows():
+        symbol = str(row.get("symbol", "")).strip().upper()
+        profile = str(row.get("source_profile", "")).strip()
+        trade_date = str(row.get("trade_date", "")).strip()
+        gamma = row.get("gamma_ratio")
+
+        if profile == "squeeze":
+            if gamma is not None and not pd.isna(gamma):
+                source = "squeeze"
+            else:
+                source = "source_absent"
+        elif profile in _VRP_SCANNER_PROFILES:
+            if symbol in squeeze_gamma:
+                gamma = squeeze_gamma[symbol]
+                source = "squeeze_join"
+            else:
+                source = "source_absent"
+        elif gamma is not None and not pd.isna(gamma):
+            source = "squeeze"
+        else:
+            source = ""
+
+        missing: list[str] = []
+        if profile != "reverse_vrp" and not bool(row.get("has_spy_context")):
+            missing.append("spy_context")
+        if profile not in _VRP_SCANNER_PROFILES and source != "source_absent" and (
+            gamma is None or pd.isna(gamma)
+        ):
+            missing.append("gamma_ratio")
+
+        gate_status, gate_reason = _context_gate_labels(
+            profile=profile,
+            missing_fields=",".join(missing),
+            has_spy_context=bool(row.get("has_spy_context")),
+        )
+
+        gamma_values.append(gamma)
+        sources.append(source)
+        regimes.append(regime_by_date.get(trade_date, str(row.get("regime_label", "") or "").strip()))
+        missing_fields.append(",".join(missing))
+        gate_statuses.append(gate_status)
+        gate_reasons.append(gate_reason)
+
+    out["gamma_ratio"] = gamma_values
+    out["gamma_ratio_source"] = sources
+    out["regime_label"] = regimes
+    out["missing_fields"] = missing_fields
+    out["context_gate_status"] = gate_statuses
+    out["context_gate_reason"] = gate_reasons
     return out
 
 
@@ -194,17 +331,32 @@ def _classify_replay_candidate(
         for part in str(row.get("missing_fields", "") or "").split(",")
         if part.strip() and part.strip().lower() != "nan"
     ]
+    profile = str(row.get("source_profile", "") or "").strip()
+    if profile == "reverse_vrp":
+        context_gaps = [g for g in context_gaps if g != "spy_context"]
+    gamma_source = str(row.get("gamma_ratio_source", "") or "").strip()
+    if gamma_source == "source_absent":
+        context_gaps = [gap for gap in context_gaps if gap != "gamma_ratio"]
     spread_gaps = spread_contract_gaps(row)
     has_spy = bool(row.get("has_spy_context"))
+
+    gate_status = str(row.get("context_gate_status", "") or "").strip()
+    gate_reason = str(row.get("context_gate_reason", "") or "").strip()
+    if not gate_status:
+        gate_status, gate_reason = _context_gate_labels(
+            profile=profile,
+            missing_fields=",".join(context_gaps),
+            has_spy_context=has_spy,
+        )
 
     playbook_decision = _playbook_decision_for_row(row)
     allowed = playbook_decision.allowed_playbook
     structure_bias = StructureBias.SKIP.value
-    regime = spy_regime_label or ""
+    regime = str(row.get("regime_label", "") or "").strip() or (spy_regime_label or "")
 
     if not symbol:
         return _ReplayAudit(
-            "REJECTED_MISSING_FIELDS",
+            _CONTEXT_GATE_BLOCKED,
             "context_gate:missing_symbol",
             structure_bias,
             allowed.value,
@@ -214,7 +366,7 @@ def _classify_replay_candidate(
         )
     if not trade_date:
         return _ReplayAudit(
-            "REJECTED_MISSING_FIELDS",
+            _CONTEXT_GATE_BLOCKED,
             "context_gate:missing_trade_date",
             structure_bias,
             allowed.value,
@@ -222,24 +374,93 @@ def _classify_replay_candidate(
             spread_gaps,
             ["missing_trade_date"],
         )
-    if context_gaps:
+    if gate_status == _CONTEXT_GATE_BLOCKED:
         return _ReplayAudit(
-            "REJECTED_MISSING_FIELDS",
-            "context_gate:" + ",".join(context_gaps),
+            _CONTEXT_GATE_BLOCKED,
+            f"context_gate:{gate_reason or 'blocked'}",
             structure_bias,
             allowed.value,
             regime,
             spread_gaps,
             context_gaps,
         )
-    if spread_gaps:
+    if gate_status == _CONTEXT_GATE_INCOMPLETE or context_gaps:
+        gaps = context_gaps or [gate_reason]
         return _ReplayAudit(
-            "REJECTED_MISSING_FIELDS",
-            "spread_economics:" + ",".join(spread_gaps),
+            _CONTEXT_GATE_INCOMPLETE,
+            "context_gate:" + ",".join(g for g in gaps if g),
             structure_bias,
             allowed.value,
             regime,
             spread_gaps,
+            gaps,
+        )
+    if spread_gaps:
+        loop_status = str(row.get("candidate_loop_status", "") or "").strip()
+        data_gap = str(row.get("data_gap_reason", "") or "").strip()
+        hydration = str(row.get("hydration_status", "") or "").strip()
+        if loop_status == CandidateLoopStatus.NO_VIABLE_EXPRESSION.value:
+            return _ReplayAudit(
+                CandidateLoopStatus.NO_VIABLE_EXPRESSION.value,
+                "expression_search_exhausted:no_viable_expression",
+                structure_bias,
+                allowed.value,
+                regime,
+                spread_gaps,
+                [],
+            )
+        if loop_status == CandidateLoopStatus.PARKED_DATA_GAP.value:
+            reason = data_gap or "candidate retained; Alpaca quote hydration incomplete"
+            return _ReplayAudit(
+                CandidateLoopStatus.PARKED_DATA_GAP.value,
+                reason,
+                structure_bias,
+                allowed.value,
+                regime,
+                spread_gaps,
+                [],
+            )
+        if loop_status in {
+            CandidateLoopStatus.PRIMARY_EXPRESSION_SELECTED.value,
+            CandidateLoopStatus.ALTERNATES_AVAILABLE.value,
+            CandidateLoopStatus.WATCH_EXPRESSION_AVAILABLE.value,
+            CandidateLoopStatus.HYDRATED.value,
+        }:
+            return _ReplayAudit(
+                loop_status,
+                str(row.get("selection_reason", "") or "primary_expression_selected"),
+                structure_bias,
+                allowed.value,
+                regime,
+                [],
+                [],
+            )
+        pending_reason = (
+            f"expression_hydration_pending:{hydration or 'spread_economics_incomplete'}"
+        )
+        return _ReplayAudit(
+            CandidateLoopStatus.HYDRATION_PENDING.value,
+            pending_reason,
+            structure_bias,
+            allowed.value,
+            regime,
+            spread_gaps,
+            [],
+        )
+    loop_status = str(row.get("candidate_loop_status", "") or "").strip()
+    if loop_status in {
+        CandidateLoopStatus.PRIMARY_EXPRESSION_SELECTED.value,
+        CandidateLoopStatus.ALTERNATES_AVAILABLE.value,
+        CandidateLoopStatus.WATCH_EXPRESSION_AVAILABLE.value,
+        CandidateLoopStatus.HYDRATED.value,
+    }:
+        return _ReplayAudit(
+            loop_status,
+            str(row.get("selection_reason", "") or "primary_expression_selected"),
+            structure_bias,
+            allowed.value,
+            regime,
+            [],
             [],
         )
     if allowed == AllowedPlaybook.SKIP:
@@ -252,7 +473,7 @@ def _classify_replay_candidate(
             [],
             [],
         )
-    if not has_spy:
+    if not has_spy and profile != "reverse_vrp":
         return _ReplayAudit(
             "PARKED_REVIEW",
             "missing_spy_context",
@@ -280,7 +501,7 @@ def _audit_row_from_series(
     audited: _ReplayAudit,
 ) -> dict[str, object]:
     symbol = str(row.get("symbol", "")).strip().upper()
-    return {
+    payload: dict[str, object] = {
         "run_id": run_id,
         "symbol": symbol,
         "underlying": symbol,
@@ -305,9 +526,13 @@ def _audit_row_from_series(
         "liquidity_status": row.get("liquidity_status", "UNKNOWN"),
         "paper_approval_status": audited.classification,
         "reject_reason": audited.reject_reason,
+        "gamma_ratio_source": row.get("gamma_ratio_source", ""),
         "classification": audited.classification,
         "provenance": PROVENANCE_TAG,
     }
+    for col in C2A_EVIDENCE_COLUMNS:
+        payload[col] = row.get(col, "")
+    return payload
 
 
 def _audit_replay_candidates(
@@ -456,8 +681,22 @@ def summarize_risk_audit(path: str | Path) -> dict[str, object]:
     counts = Counter(str(v) for v in df[col].fillna(""))
 
     approved = counts.get("APPROVED_PAPER", 0) + counts.get("APPROVED_FOR_PAPER_REVIEW", 0)
-    parked = counts.get("PARKED_REVIEW", 0) + counts.get("PARKED", 0)
-    rejected_missing = counts.get("REJECTED_MISSING_FIELDS", 0)
+    parked = (
+        counts.get("PARKED_REVIEW", 0)
+        + counts.get("PARKED", 0)
+        + counts.get(CandidateLoopStatus.PARKED_DATA_GAP.value, 0)
+        + counts.get(CandidateLoopStatus.HYDRATION_PENDING.value, 0)
+        + counts.get(CandidateLoopStatus.NO_VIABLE_EXPRESSION.value, 0)
+        + counts.get(CandidateLoopStatus.PRIMARY_EXPRESSION_SELECTED.value, 0)
+        + counts.get(CandidateLoopStatus.WATCH_EXPRESSION_AVAILABLE.value, 0)
+        + counts.get(CandidateLoopStatus.ALTERNATES_AVAILABLE.value, 0)
+        + counts.get(CandidateLoopStatus.HYDRATED.value, 0)
+    )
+    rejected_missing = (
+        counts.get("REJECTED_MISSING_FIELDS", 0)
+        + counts.get(_CONTEXT_GATE_BLOCKED, 0)
+        + counts.get(_CONTEXT_GATE_INCOMPLETE, 0)
+    )
     rejected_rr = counts.get("REJECTED_RR", 0)
     rejected_pmp = counts.get("REJECTED_PMP", 0)
     rejected_liquidity = counts.get("REJECTED_LIQUIDITY", 0)
@@ -485,6 +724,40 @@ def summarize_risk_audit(path: str | Path) -> dict[str, object]:
         for v in df.get("reject_reason", pd.Series(dtype=str)).fillna("")
         if str(v).startswith("spread_economics:")
     )
+    hydration_pending = counts.get(CandidateLoopStatus.HYDRATION_PENDING.value, 0)
+    parked_data_gap = counts.get(CandidateLoopStatus.PARKED_DATA_GAP.value, 0)
+    no_viable_expression = counts.get(CandidateLoopStatus.NO_VIABLE_EXPRESSION.value, 0)
+    primary_selected = counts.get(CandidateLoopStatus.PRIMARY_EXPRESSION_SELECTED.value, 0)
+    watch_expression_available = counts.get(CandidateLoopStatus.WATCH_EXPRESSION_AVAILABLE.value, 0)
+    watch_operator_review = counts.get(CandidateLoopStatus.WATCH_OPERATOR_REVIEW.value, 0)
+    watch_operator_approved = counts.get(CandidateLoopStatus.WATCH_OPERATOR_APPROVED.value, 0)
+    watch_operator_rejected = counts.get(CandidateLoopStatus.WATCH_OPERATOR_REJECTED.value, 0)
+    alternates_available = counts.get(CandidateLoopStatus.ALTERNATES_AVAILABLE.value, 0)
+    context_gate_rejects = sum(
+        1
+        for v in df.get("classification", pd.Series(dtype=str)).fillna("")
+        if str(v) in {_CONTEXT_GATE_BLOCKED, _CONTEXT_GATE_INCOMPLETE}
+    )
+    reverse_vrp_symbol_context_rows = 0
+    if "source_profile" in df.columns:
+        reverse_vrp_symbol_context_rows = int(
+            (df["source_profile"].astype(str) == "reverse_vrp").sum()
+        )
+    spy_backdrop_absent = 0
+    if "context_gate_reason" in df.columns:
+        spy_backdrop_absent = int(
+            (df["context_gate_reason"].astype(str) == "missing_spy_context").sum()
+        )
+    hydration_expressions_attempted = 0
+    if "expression_count" in df.columns:
+        hydration_expressions_attempted = int(
+            pd.to_numeric(df["expression_count"], errors="coerce").fillna(0).gt(0).sum()
+        )
+    context_gamma_source_absent = 0
+    if "gamma_ratio_source" in df.columns:
+        context_gamma_source_absent = int(
+            (df["gamma_ratio_source"].astype(str) == "source_absent").sum()
+        )
 
     regime = ""
     if "regime_label" in df.columns:
@@ -510,6 +783,20 @@ def summarize_risk_audit(path: str | Path) -> dict[str, object]:
         "rejected_liquidity": rejected_liquidity,
         "rejected_policy": rejected_policy,
         "rejected_spread_economics": spread_economics_rejects,
+        "hydration_pending": hydration_pending,
+        "parked_data_gap": parked_data_gap,
+        "no_viable_expression": no_viable_expression,
+        "primary_expression_selected": primary_selected,
+        "watch_expression_available": watch_expression_available,
+        "watch_operator_review": watch_operator_review,
+        "watch_operator_approved": watch_operator_approved,
+        "watch_operator_rejected": watch_operator_rejected,
+        "alternates_available": alternates_available,
+        "context_gate_rejects": context_gate_rejects,
+        "reverse_vrp_symbol_context_rows": reverse_vrp_symbol_context_rows,
+        "spy_backdrop_absent": spy_backdrop_absent,
+        "hydration_expressions_attempted": hydration_expressions_attempted,
+        "context_gamma_source_absent": context_gamma_source_absent,
         "top_rejection_reasons": top_reasons,
         "regime_label": regime,
         "structure_bias": structure_bias,
