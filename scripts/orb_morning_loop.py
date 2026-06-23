@@ -61,6 +61,7 @@ def main() -> int:
 
         manifest.context_artifact = pipeline_result.context_artifact
         manifest.candidates_artifact = pipeline_result.candidates_artifact
+        manifest.expressions_artifact = pipeline_result.expressions_artifact
         manifest.status = "PIPELINE_COMPLETE"
         write_manifest(base_dir, manifest)
         append_scheduler_log(

@@ -299,6 +299,11 @@ def context_from_vrp_row(row: pd.Series, *, profile: str, session_date: str | No
     source_type = "REVERSE_VRP" if profile == "reverse_vrp" else "VRP"
     notes = _note_parts(
         current_price=parse_numeric(row.get("current_price")),
+        hedge_wall=parse_numeric(row.get("hedge_wall")),
+        call_wall=parse_numeric(row.get("call_wall")),
+        put_wall=parse_numeric(row.get("put_wall")),
+        key_gamma_strike=parse_numeric(row.get("key_gamma_strike")),
+        key_delta_strike=parse_numeric(row.get("key_delta_strike")),
         one_month_rv=one_month_rv,
         one_month_iv=one_month_iv,
         garch_rank=parse_numeric(row.get("garch_rank")),
@@ -308,6 +313,7 @@ def context_from_vrp_row(row: pd.Series, *, profile: str, session_date: str | No
         options_impact=parse_numeric(row.get("options_impact")),
         earnings_date=parse_excel_serial_date(row.get("earnings_date")),
     )
+    require_regime = profile != "reverse_vrp"
     missing = _missing_list(
         gamma_ratio=None,
         vrp=vrp,
@@ -316,7 +322,7 @@ def context_from_vrp_row(row: pd.Series, *, profile: str, session_date: str | No
         squeeze_state=None,
         regime_label=None,
         confidence=None,
-        require_regime=True,
+        require_regime=require_regime,
         require_vrp=False,
         require_iv_rank=False,
     )

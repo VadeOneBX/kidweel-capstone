@@ -40,6 +40,7 @@ class OrbRunManifest(BaseModel):
 
     context_artifact: str | None = None
     candidates_artifact: str | None = None
+    expressions_artifact: str | None = None
     risk_audit_artifact: str | None = None
     advisory_artifact: str | None = None
     notification_artifact: str | None = None

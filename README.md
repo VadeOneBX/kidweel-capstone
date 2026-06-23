@@ -1,229 +1,157 @@
-# KIDWEEL
+# Kidweel GEX Automation
 
-## What breaks first?
-
-Options markets are unforgiving and complex. The failure mode is usually **inconsistency**—a skipped check, a loose quote, a helper that drifts into permission—not missing intelligence.
-
-Kidweel is an operator-built loop for one decision path: context becomes structured candidates, deterministic gates decide what may continue, and **paper transport** carries only approved payloads when you explicitly opt in. Supporting tools (Claude, subagents, ML review) help you **form better questions**. They do not get to force the answer.
-
-**Technically, this is a deterministic paper-live options decision system.** Under the hood: playbooks, Option Alpha–style spread math, PMP/reward–risk gates, approval handoffs, limit multileg payloads, Alpaca **paper** submit, post-submit audits, and quote-based close pricing—not market prediction.
-
-Automation creates leverage. Constraints determine whether that leverage survives scale.
-
----
-
-## Proof on paper (operating loop)
-
-This repo is judged by a traceable path, not by a headline:
-
-1. **Paper-live candidates** — staged spreads from fixed playbooks and structure rules  
-2. **PMP / RR / EV** — deterministic spread math before any advisory or transport handoff  
-3. **Approval** — rows at `APPROVED_FOR_PAPER_REVIEW` only ([paper approval candidates](./docs/paper-approval-candidates.md))  
-4. **Payload** — `mleg` limit, day orders shaped for transport ([paper payloads](./docs/paper-payload-candidates.md))  
-5. **Paper submit** — repo-native Alpaca paper bridge; default **dry-run**; real submit requires explicit `--submit-paper` ([alpaca paper bridge](./docs/alpaca-paper-bridge.md))  
-6. **Fill audit** — read-only order status check after submit ([paper order status audit](./docs/paper-order-status-audit.md))  
-7. **Quote-mid close** — controlled multileg close after verified fill; entry fill is not used as close price ([paper closeout](./docs/paper-closeout.md))
-
-Notebook contrast (limit mleg vs notebook market/heuristics): [docs/notebook-alignment.md](./docs/notebook-alignment.md).
+**Paper-only decision infrastructure.** Kidweel GEX Automation is a paper-only options decision system that converts source-grounded market context into risk-defined trade candidates through deterministic guardrails, spread economics, and audit artifacts. Live trading is not supported. Transport defaults to **dry-run**; real Alpaca paper submit requires explicit operator opt-in (`--submit-paper`).
 
 Claude proposes. The system decides. Transport executes.
 
 ---
 
-## What this is
+## 1. Project Thesis
 
-- A constrained operating loop: context → playbook → structure → validation → payload → paper transport → response → audit  
-- SpotGamma-oriented ingestion and environment classification within **fixed** playbooks  
-- Deterministic gates (playbook policy, RR, PMP/EV, paper execution gate, MCP paper gate on the narrow contract path)  
-- Iterative backtest scaffolding (PnL, profit factor, Sharpe, drawdown / stop-rate, playbook segmentation, validation status)  
-- A **bounded** Claude layer and required ML/subagent advisory (interpretation and flags—not approval or transport)  
-- **Repo-native Alpaca paper bridge** (opt-in submit) plus offline mock MCP path (C11A) and external Alpaca MCP **transport contract** scaffold (C10A)
+Options workflows fail in practice when checks drift—skipped gates, loose quotes, or advisory layers that start to sound like permission. Kidweel is an operator-built **paper-only decision trail**: SpotGamma and related inputs become normalized context, deterministic gates decide what may continue, and only approved multileg payloads may reach Alpaca **paper** transport when you explicitly opt in.
 
-## What this is not
+Automation creates leverage. **Deterministic guardrails** determine whether that leverage survives scale. This is not market prediction or a discretionary signal engine; it is **source-grounded context → spread economics → risk-defined execution policy → audit trail**.
 
-- **Not** live trading or a broker-side brain  
-- **Not** unattended execution—submit and close require explicit flags and paper credentials  
-- **Not** an assistant with order authority, position management, or cancel/replace automation  
-- **Not** unrestricted order submission  
-
-The problem is not getting systems to act. It is getting them to act **consistently** within enforceable constraints.
+Supporting layers (Claude briefs, subagent skills, ML-style advisory flags) help **candidate review** and interpretation. They do not approve trades, mutate thresholds, or submit orders.
 
 ---
 
-## System loop
+## 2. Canonical Data Sources
+
+| Source | Role in repo | Authority |
+|--------|----------------|-----------|
+| **SpotGamma exports** | Dealer positioning, volatility regime, walls, and directional constraints before spread economics | **Context only**—feeds ingestion and normalization; not a trade signal |
+| **SPY backdrop context** | Regime label for morning replay hydration (when present) | Joined in risk guard; absent backdrop is advisory, not a silent upgrade |
+| **Alpaca market data / greeks staging** | Option chain quotes, greeks staging, hydration expressions | **Infrastructure / reference**—Alpaca is used as a broker/data integration and options workflow reference point. It is not treated as a trading brain or discretionary signal source |
+| **Operator-staged files** | `data/spotgamma/inbox`, dated raw session folders | Intake contract enforced at wake; rejects are logged on the manifest |
+
+SpotGamma-derived context is used to describe dealer positioning, volatility regime, and directional constraints before any spread economics are evaluated.
+
+---
+
+## 3. Architecture Flow
+
+Canonical path (implemented modules and scripts; not every stage runs in every entrypoint):
+
+```text
+SpotGamma ingestion
+  → context derivation (normalize / feature corpus)
+  → symbol screening & replay rows (playbook / structure bias)
+  → dealer direction scoring & tier gate (expression ranking)
+  → spread builder & spread math (Option Alpha economics / EV when PMP exists)
+  → optional advisory overlay (Claude brief, subagent skills—flags only)
+  → risk guard (audit CSV + rejection reasons)
+  → paper broker / executor (repo bridge, status audit, closeout—opt-in submit)
+  → session runner (ORB morning loop: wake → pipeline → guard → brief → notify)
+```
+
+**Morning loop (primary operator path):** `scripts/orb_morning_loop.py` runs ingestion wake, `qops.pipeline.daily_pipeline` (context + candidates + Alpaca hydration expressions), `qops.risk.guard_runner`, then `qops.advisory.claude_brief` and optional notification. It does **not** submit paper orders.
+
+**Spread generation path (separate CLI):** `examples/generate_spread_candidates.py` reads staged Alpaca greeks CSV and emits spread candidates through `spread_math`—no transport.
+
+**Run index:** `data/runs/<run_date>/orb_manifest.json` (latest) and `<run_id>_orb_manifest.json` (immutable snapshot) list artifact paths for that run.
 
 <p align="center">
   <a href="./diagrams/system_operating_loop.svg">
-    <img src="./diagrams/system_operating_loop.svg" alt="Operating loop: operator intent, see advisory, deterministic gates, paper transport execute" width="920"/>
+    <img src="./diagrams/system_operating_loop.svg" alt="Operating loop: operator intent, advisory see-only, deterministic gates, paper transport execute" width="920"/>
   </a>
 </p>
 
-**Data path:** `Context → playbook → structure → validation → payload → paper transport → response → audit`
-
-SpotGamma and related context feed screening and playbook selection. Structure and risk modules produce approved handoffs only when gates pass. The **repo-owned paper bridge** carries approved payloads when opted in; MCP remains a **transport-only** contract, not a decision layer. Audits record gate outcomes, broker responses, and normalized status.
+See also [docs/artifact_inspection_checklist.md](./docs/artifact_inspection_checklist.md) and [docs/evidence_artifacts_guide.md](./docs/evidence_artifacts_guide.md).
 
 ---
 
-## Current status
+## 4. Execution Policy
 
-| Capability | Status |
-|------------|--------|
-| Deterministic core (playbooks, RR/PMP, structure) | In repo |
-| Backtest evidence & Claude research comparisons | In repo |
-| Paper execution payload + gates | In repo |
-| **Repo-native Alpaca paper bridge** | **Implemented** — opt-in (`--submit-paper`); paper-only; fail-closed URL |
-| **External Alpaca MCP transport contract** | **Scaffolded / future** — C10A typed contract; C11A offline mock; not broker judgment |
-| **Paper order status audit** | **Implemented** — read-only post-submit |
-| **Quote-mid close pricing** | **Implemented** — CLOSE-C1B; dry-run default |
-| **Advisory groups** | **Named** — docs expanding ([advisory group matrix](./docs/advisory-group-matrix.md)) |
-| **Claude skills / subagency footing** | **Implemented** — bounded manifests and skills ([subagency proof](./docs/subagency-proof.md)) |
-| Live trading | **Out of scope** |
+The system is designed for **paper execution and auditability**. Live trading is not supported.
 
----
+| Policy | Repo behavior |
+|--------|----------------|
+| **Bull call spreads (and other canonical verticals)** | May continue through spread math, risk guard, paper approval, and payload build toward **automated paper execution** when gates pass and the operator opts in |
+| **Long calls** | May appear in context (`LONG_CALL_PARKED` / parked bias); playbook policy **downgrades to SKIP** for canonical execution—they stay **parked for review**, not unattended single-leg submit |
+| **Live trading** | Forbidden—`scripts/orb_morning_loop.py` rejects `--live`; capstone rules forbid live Alpaca transport URL |
+| **Dry-run default** | Paper bridge and closeout default to dry-run; `--submit-paper` required for real paper submit |
+| **Unattended “AI” execution** | Not supported—submit and close require explicit flags, credentials, and packet scope |
 
-## Advisory lenses (thesis vs permission)
+Canonical executable structures: `BULL_CALL_SPREAD`, `BEAR_PUT_SPREAD`, `BULL_PUT_CREDIT_SPREAD`, `BEAR_CALL_CREDIT_SPREAD`, or `SKIP`. Details: [docs/system-identity.md](./docs/system-identity.md).
 
-Markets offer more than one plausible story. Kidweel separates **comparing theses** from **permission to trade**.
-
-Three named advisory groups (matrix and SpotGamma model docs still expanding):
-
-| Group | Role (advisory only) |
-|-------|----------------------|
-| `SQUEEZE_CANDIDATES` | Squeeze / positioning stress lens on supplied context |
-| `VOLATILITY_RISK_PREMIUM` | Short-vol / carry-style risk premium lens |
-| `REVERSE_RISK_PREMIUM` | Skew / reversal-style lens |
-
-The **claude-advisor** skill maps coordinator-supplied context to a single primary label (`ADVISORY_OK`, `ADVISORY_CAUTION`, `ADVISORY_DOWNGRADE`, `ADVISORY_SKIP`). It may suggest bounded spread **ideas** within canonical structures—proposals only. Missing context is reported; fields are not invented ([claude advisor context](./docs/claude-advisor-context.md)).
-
-Deterministic spread math, playbooks, and paper gates remain the decision owner. **More agents do not mean more authority.**
+Paper path docs: [alpaca paper bridge](./docs/alpaca-paper-bridge.md), [paper approval candidates](./docs/paper-approval-candidates.md), [paper payloads](./docs/paper-payload-candidates.md), [order status audit](./docs/paper-order-status-audit.md), [paper closeout](./docs/paper-closeout.md).
 
 ---
 
-## Structure and advisory policy
+## 5. Evidence and Backtesting
 
-Canonical structure and ML/subagent rules: [docs/system-identity.md](./docs/system-identity.md).
+**What counts as evidence:** replay and morning-run **CSVs**, **risk audit** rows (including rejects), **orb manifests**, **hydration expression** files, **paper transport** records, and deterministic gate reasons. A successful run does not require paper submission. A useful run must preserve source context, candidate construction, guard outcome, and rejection or approval reason.
 
-**Structure:** The spread builder may emit `BULL_CALL_SPREAD`, `BEAR_PUT_SPREAD`, `BULL_PUT_CREDIT_SPREAD`, `BEAR_CALL_CREDIT_SPREAD`, or `SKIP`. No parked structures. Executable paths are multi-leg, risk-defined spreads only. Single-leg long calls or puts are for context, not canonical execution.
+**Rejected candidates are evidence.** They show guard behavior, missing-field handling, spread economics failure, and policy enforcement.
 
-**ML / subagents:** Required advisory layers—they score, flag, compare expressions, downgrade confidence, and may recommend `SKIP`. They do not override gates, mutate thresholds, or call transport.
+**Backtesting / replay in repo:**
 
-Paper-only execution remains mandatory.
+- **Replay aggregation:** `src/qops/backtest/runner.py` (`run_iterative_backtest`) aggregates **ReplayContext** rows (PnL and exits supplied by context—not a live broker loop).
+- **SpotGamma → replay candidates:** `spotgamma_replay_builder`, daily pipeline exports.
+- **Alpaca replay planning:** `alpaca_replay_inputs.py` plans historical data needs—no orders.
+- **Mock research memos:** `docs/backtests/`, `docs/audit/`, `docs/reconciliation/mock_backtest_reconciliation_C1.md` document **synthetic** PnL and strikes—useful for inspection, not proof of edge.
 
----
+There is no checked-in `alpaca_iterative_backtester.py` in this repository. Treat any external iterative backtest helper that fabricates Sharpe or PnL with random placeholders as **legacy/scaffold**, not final evidence infrastructure.
 
-## Claude boundary
+Legacy or scaffolded backtesting utilities are retained only where useful for inspection or development. Evidence claims should come from replay artifacts, risk audits, paper transport records, and deterministic candidate outputs—not randomized placeholder metrics.
 
-Claude may interpret context (skew, liquidity, deteriorating reward/risk, debit vs credit posture) and propose **bounded** spread alternatives only within the canonical structure set above.
-
-Claude **cannot** approve trades, size positions, execute orders, bypass validation, or call broker transport.
-
----
-
-## Paper and MCP transport boundary
-
-- **The repo owns approval.** Broker and MCP surfaces are **transport only**—they do not decide sizing, structure, or whether a row continues.
-- **Repo-native paper bridge** — `examples/submit_paper_payload_candidates.py`; `ALPACA_PAPER_*`; canonical base URL `https://paper-api.alpaca.markets`; deterministic `client_order_id`; no blind auth retry.
-- **C10A** ([transport contract](./integrations/alpaca_mcp/transport_contract.md)) — narrow request/response shape for a future external Alpaca MCP paper path.
-- **C11A** — offline mock bridge: gate → mock transport → normalize → audit (no network). Do not confuse with production MCP I/O.
-
-Transport executes; it does not decide.
+Research-only Claude overlay comparisons: [docs/claude-backtest-wiring.md](./docs/claude-backtest-wiring.md), [docs/findings-c13-claude-context.md](./docs/findings-c13-claude-context.md).
 
 ---
 
-## Backtest evidence
+## 6. Paper-Only Guardrails
 
-The backtest layer produces comparative evidence: trade counts, profit factor, Sharpe, drawdown-related metrics, stop-rate, playbook segmentation, and validation status (`eligible_for_paper`, research-mode exceptions). Claude overlay paths are **research-only**—they do not change approval or paper gates.
+- **Paper-only execution path** with fail-closed gates (`paper_only=True` in risk guard).
+- **Manifest flags:** `live_mode_enabled` and `broker_mutation_occurred` should remain false for morning runs unless an explicit, scoped paper packet says otherwise.
+- **Schemas and playbooks are contracts**—do not re-derive protected fields (`regime_label`, `confidence`, `gamma_ratio`) in automation.
+- **Alpaca paper transport:** `ALPACA_PAPER_*`, base URL `https://paper-api.alpaca.markets` only; deterministic `client_order_id` from payload id.
+- **MCP:** transport contract scaffold (C10A) and offline mock (C11A)—not broker judgment.
+- **Subagents / skills:** bounded delegates; same validation path as the deterministic core ([subagency proof](./docs/subagency-proof.md), [AGENTS.md](./AGENTS.md)).
 
-Example (limited sample): [docs/findings-c13-claude-context.md](./docs/findings-c13-claude-context.md).
-
----
-
-## Constraint Survivability
-
-As automation scales, systems need **enforceable constraints**. AI can generate actions; constraint systems determine which actions are allowed.
-
-Paper trading here is a **proof environment** for those boundaries: same gates whether one tool or many assist the operator. See [docs/system-identity.md](./docs/system-identity.md).
+Governance: [docs/c13-governance.md](./docs/c13-governance.md), [CLAUDE.md](./CLAUDE.md).
 
 ---
 
-## Why this matters beyond trading
+## 7. Fallback / Manual Review Path
 
-Wherever software can **act**, teams need a clear rule for **when it may act**. This repo demonstrates that pattern in a strict, paper-only options loop. **No enterprise products are integrated here in production**—the lesson is architectural: propose → decide → execute, with audits.
+When automation stops (intake reject, hydration gap, guard reject, or WATCH expression):
 
----
+1. Read **`data/runs/<run_date>/<run_id>_orb_manifest.json`** for artifact paths and errors.
+2. Inspect **candidates**, **expressions**, and **`data/processed/risk/<run_id>_risk_audit.csv`**—reject reasons are first-class evidence.
+3. Read **`data/advisory/<run_id>_claude_brief.md`** (advisory summary from artifacts—not approval).
+4. **WATCH promotion:** operator-only `scripts/review_watch_expression.py` may set `paper_route_status=PAPER_REVIEW_READY` in a review CSV; it does **not** submit orders.
+5. **Paper submit** remains a separate explicit step: `examples/submit_paper_payload_candidates.py` (dry-run unless `--submit-paper`).
 
-## Subagency proof
-
-<p align="center">
-  <a href="./diagrams/subagency_delegation.svg">
-    <img src="./diagrams/subagency_delegation.svg" alt="Subagency: coordinator, bounded skills, deterministic gates, gated transport; forbidden path blocked" width="640"/>
-  </a>
-</p>
-
-Kidweel delegates **bounded** work to project skills and subagents under a human-directed coordinator—without granting transport authority ([subagency proof](./docs/subagency-proof.md), [AGENTS.md](./AGENTS.md)).
-
-**Subagents help the system see.** They do not help the system act.
-
-**Subagents may propose:** classification, doc diffs, safety tables, advisory flags, bounded structure ideas, caution notes, `SKIP` recommendations.
-
-**Subagents may not:** approve trades, create execution payloads, bypass gates, mutate playbooks or thresholds, or call broker or MCP order tools.
-
-**Same validation path:**
-
-1. Advisory or skill output (see only)  
-2. Deterministic validator and risk gates (decide)  
-3. Transport carries only approved payloads (execute)  
-4. Audit records the path  
-
-Swarm-safe behavior means every assistant hits the same gates—not more authority per assistant.
+Operator commands: [docs/operator_commands.md](./docs/operator_commands.md).
 
 ---
 
-## Safety posture
+## 8. What This Is Not
 
-- Paper-only execution path; fail-closed gates  
-- No live trading logic in capstone rules; live Alpaca endpoint forbidden for transport  
-- No broker/network I/O without explicit opt-in flags and an approved packet scope  
-- Schemas and playbooks are contracts—do not bypass or re-derive protected fields in automation  
-- External Alpaca MCP paper I/O remains a future explicit packet; repo paper bridge is separate and paper-only  
+- Not **live execution** or production trading on live Alpaca endpoints.
+- Not an **autonomous AI trading** system, **AI trading brain**, **self-directed trading agent**, or **fully automated options trader**.
+- Not a **predictive alpha engine** or **guaranteed edge** product.
+- Not unrestricted order submission—no blind auth retry, no assistant with cancel/replace authority.
+- Not proof that mock backtest memos or placeholder metrics represent real PnL.
+
+It **is** paper-only decision infrastructure with deterministic guardrails, source-grounded context, spread economics, audit trail, and explicit candidate review before any paper transport.
 
 ---
 
 ## Repository navigation
 
-**Governance & identity**
+| Area | Doc |
+|------|-----|
+| System identity & structure policy | [docs/system-identity.md](./docs/system-identity.md) |
+| Evidence map | [docs/evidence_artifacts_guide.md](./docs/evidence_artifacts_guide.md) |
+| Morning artifact checklist | [docs/artifact_inspection_checklist.md](./docs/artifact_inspection_checklist.md) |
+| Subagent governance | [docs/subagent-governance.md](./docs/subagent-governance.md) |
+| Claude advisor (proposal only) | [docs/claude-advisor-context.md](./docs/claude-advisor-context.md) |
+| Alpaca MCP integration | [integrations/alpaca_mcp/README.md](./integrations/alpaca_mcp/README.md) |
 
-<p>
-  <a href="./docs/system-identity.md"><img src="https://img.shields.io/badge/System_identity-374151?style=for-the-badge" alt="System identity"/></a>
-  <a href="./docs/subagent-governance.md"><img src="https://img.shields.io/badge/Subagent_governance-374151?style=for-the-badge" alt="Subagent governance"/></a>
-  <a href="./docs/subagency-proof.md"><img src="https://img.shields.io/badge/Subagency_proof-374151?style=for-the-badge" alt="Subagency proof"/></a>
-  <a href="./AGENTS.md"><img src="https://img.shields.io/badge/AGENTS-374151?style=for-the-badge" alt="AGENTS"/></a>
-  <a href="./CLAUDE.md"><img src="https://img.shields.io/badge/CLAUDE-374151?style=for-the-badge" alt="CLAUDE"/></a>
-</p>
+**Tests (canonical):**
 
-**Paper path**
-
-<p>
-  <a href="./docs/alpaca-paper-bridge.md"><img src="https://img.shields.io/badge/Paper_bridge-1e3a5f?style=for-the-badge" alt="Alpaca paper bridge"/></a>
-  <a href="./docs/paper-closeout.md"><img src="https://img.shields.io/badge/Mleg_closeout-1e3a5f?style=for-the-badge" alt="Paper closeout"/></a>
-  <a href="./docs/paper-order-status-audit.md"><img src="https://img.shields.io/badge/Order_status_audit-1e3a5f?style=for-the-badge" alt="Order status audit"/></a>
-  <a href="./docs/notebook-alignment.md"><img src="https://img.shields.io/badge/Notebook_alignment-1e3a5f?style=for-the-badge" alt="Notebook alignment"/></a>
-</p>
-
-**Claude & advisory**
-
-<p>
-  <a href="./docs/claude-advisor-context.md"><img src="https://img.shields.io/badge/Claude_advisor-4c1d95?style=for-the-badge" alt="Claude advisor context"/></a>
-  <a href="./docs/advisory-group-matrix.md"><img src="https://img.shields.io/badge/Advisory_groups-4c1d95?style=for-the-badge" alt="Advisory group matrix"/></a>
-  <a href="./docs/claude-overlay.md"><img src="https://img.shields.io/badge/Claude_overlay-4c1d95?style=for-the-badge" alt="Claude overlay"/></a>
-  <a href="./docs/claude-backtest-wiring.md"><img src="https://img.shields.io/badge/Claude_backtest-4c1d95?style=for-the-badge" alt="Claude backtest wiring"/></a>
-</p>
-
-**Integrations & diagrams**
-
-<p>
-  <a href="./integrations/alpaca_mcp/README.md"><img src="https://img.shields.io/badge/Alpaca_MCP-14532d?style=for-the-badge" alt="Alpaca MCP README"/></a>
-  <a href="./integrations/alpaca_mcp/transport_contract.md"><img src="https://img.shields.io/badge/C10A_transport-14532d?style=for-the-badge" alt="C10A transport contract"/></a>
-  <a href="./diagrams/claude_context_layer.md"><img src="https://img.shields.io/badge/Context_layer-14532d?style=for-the-badge" alt="Claude context layer"/></a>
-  <a href="./diagrams/system_operating_loop.svg"><img src="https://img.shields.io/badge/System_loop_diagram-14532d?style=for-the-badge" alt="System operating loop SVG"/></a>
-</p>
+```bash
+PYTHONPATH=src python -m pytest tests -q
+```

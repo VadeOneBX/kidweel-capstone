@@ -94,6 +94,11 @@ _VRP_HEADERS: dict[str, str] = {
     "options implied move": "options_implied_move",
 }
 
+# Reverse-VRP scanner export (explicit map; same canonical fields as VRP).
+_REVERSE_VRP_HEADERS: dict[str, str] = {
+    **_VRP_HEADERS,
+}
+
 
 def normalize_header_label(name: object) -> str:
     """Strip, fix NBSP, collapse spaces, lowercase for profile matching."""
@@ -184,7 +189,12 @@ def _read_xlsx_with_profile(path: Path) -> tuple[pd.DataFrame, ExportProfile]:
             last_err = f"header_row={header_row} spy excel (use load_spy_excel)"
             continue
         if profile is not None:
-            table = _SQUEEZE_HEADERS if profile == "squeeze" else _VRP_HEADERS
+            if profile == "squeeze":
+                table = _SQUEEZE_HEADERS
+            elif profile == "reverse_vrp":
+                table = _REVERSE_VRP_HEADERS
+            else:
+                table = _VRP_HEADERS
             rename = _build_rename_map(list(df.columns), table)
             if profile in {"vrp", "reverse_vrp"} and "symbol" not in rename.values():
                 last_err = f"header_row={header_row} missing symbol map"

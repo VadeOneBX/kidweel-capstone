@@ -274,9 +274,9 @@ def build_spy_context_by_date(contexts: list[SpotGammaContextRow]) -> dict[str, 
 def _candidate_missing_fields(c: ReplayCandidateRow) -> list[str]:
     """Context-gate gaps only (not optional scanner metrics or spread economics)."""
     missing: list[str] = []
-    if not c.has_spy_context:
+    if c.source_profile != "reverse_vrp" and not c.has_spy_context:
         missing.append("spy_context")
-    if c.gamma_ratio is None:
+    if c.gamma_ratio is None and c.source_profile not in {"vrp", "reverse_vrp"}:
         missing.append("gamma_ratio")
     return missing
 

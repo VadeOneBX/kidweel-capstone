@@ -9,6 +9,8 @@ from zoneinfo import ZoneInfo
 from qops.ingest.file_contracts import evaluate_ingestion_file
 from qops.runtime.orb_manifest import OrbRunManifest, RunMode, write_manifest
 
+_IGNORED_INTAKE_FILENAMES = frozenset({".gitkeep", ".DS_Store"})
+
 
 @dataclass(frozen=True, slots=True)
 class _IntakeFile:
@@ -49,7 +51,7 @@ def _collect_intake_files(base_dir: Path, run_date: str) -> list[_IntakeFile]:
         if not source_dir.is_dir():
             continue
         for path in sorted(source_dir.iterdir()):
-            if not path.is_file() or path.name == ".gitkeep":
+            if not path.is_file() or path.name in _IGNORED_INTAKE_FILENAMES:
                 continue
             result = evaluate_ingestion_file(path, run_date=run_date)
             if result.accepted and result.normalized_name:

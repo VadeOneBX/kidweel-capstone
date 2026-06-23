@@ -95,6 +95,24 @@ def test_ingestion_wake_no_files_writes_manifest(tmp_path: Path) -> None:
     assert manifest_path(tmp_path, manifest.run_date).exists()
 
 
+def test_ingestion_wake_ignores_ds_store_in_raw_session(tmp_path: Path) -> None:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    run_date = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
+    raw_dir = tmp_path / "data/spotgamma/raw" / run_date
+    raw_dir.mkdir(parents=True)
+    (raw_dir / ".DS_Store").write_bytes(b"bogus")
+    (raw_dir / "squeeze.xlsx").write_text("x", encoding="utf-8")
+
+    manifest = run_ingestion_wake(tmp_path, mode="manual", dry_run=False)
+
+    assert manifest.files_found == 1
+    assert manifest.files_staged == 1
+    assert manifest.files_rejected == 0
+    assert not manifest.rejection_reasons
+
+
 def test_execution_halt_blocks_paper_submit(tmp_path: Path) -> None:
     from qops.execution.alpaca_paper_bridge import run_paper_payload_transport
     from qops.execution.paper_payload_candidate import PaperPayloadCandidate
