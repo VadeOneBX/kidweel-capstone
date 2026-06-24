@@ -167,7 +167,7 @@ def load_filled_order_audit_inputs(
     payload_rows = load_paper_payload_rows(payload_candidates_path)
     payload_index = _payload_leg_index(payload_rows)
 
-    if source == "transport" and not resolved.is_file():
+    if source == "transport" and not input_path.is_file():
         resolved = transport_path
 
     if not resolved.is_file():
