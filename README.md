@@ -215,6 +215,7 @@ Swarm-safe behavior means every assistant hits the same gates—not more authori
 <p>
   <a href="./docs/claude-advisor-context.md"><img src="https://img.shields.io/badge/Claude_advisor-4c1d95?style=for-the-badge" alt="Claude advisor context"/></a>
   <a href="./docs/advisory-group-matrix.md"><img src="https://img.shields.io/badge/Advisory_groups-4c1d95?style=for-the-badge" alt="Advisory group matrix"/></a>
+  <a href="./docs/evidence_artifacts_guide.md"><img src="https://img.shields.io/badge/Evidence_artifacts-4c1d95?style=for-the-badge" alt="Evidence artifacts guide"/></a>
   <a href="./docs/claude-overlay.md"><img src="https://img.shields.io/badge/Claude_overlay-4c1d95?style=for-the-badge" alt="Claude overlay"/></a>
   <a href="./docs/claude-backtest-wiring.md"><img src="https://img.shields.io/badge/Claude_backtest-4c1d95?style=for-the-badge" alt="Claude backtest wiring"/></a>
 </p>

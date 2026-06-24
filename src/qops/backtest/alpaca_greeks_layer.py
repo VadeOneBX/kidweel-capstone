@@ -680,14 +680,6 @@ def _alpaca_greeks_complete(g: dict[str, float | None]) -> bool:
     return g.get("delta") is not None and g.get("gamma") is not None
 
 
-def _filter_chain_snapshots(
-    snapshots: dict[str, Any],
-    plan: AlpacaBlueprintReplayPlanRow,
-) -> dict[str, Any]:
-    filtered, _ = _filter_chain_snapshots_with_stats(snapshots, plan)
-    return filtered
-
-
 def _filter_chain_snapshots_with_stats(
     snapshots: dict[str, Any],
     plan: AlpacaBlueprintReplayPlanRow,
@@ -793,6 +785,7 @@ def enrich_contract_row(
             mode=row_mode,
             source=row_source,
         )
+    if _alpaca_greeks_complete(greeks):
         source = "alpaca_snapshot"
         status = "AVAILABLE"
         confidence = "high"
@@ -1108,16 +1101,59 @@ class AlpacaMarketDataCredentialCheck:
     detail: str | None
 
 
-def load_local_env() -> None:
-    """Load `.env` when python-dotenv is available; never raises on permission errors."""
+def repo_root_env_path() -> Path:
+    """Path to repo-root `.env` (never read or printed by callers)."""
+    return Path(__file__).resolve().parents[3] / ".env"
+
+
+_HYDRATION_SAFE_ENV_FLAGS: tuple[str, ...] = ("NO_SUBMIT", "DRY_RUN", "PAPER_ONLY")
+_HYDRATION_SAFE_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+
+def load_local_env(*, env_path: Path | None = None) -> bool:
+    """
+    Load local `.env` when python-dotenv is available.
+
+    Does not override already-exported environment variables. Never raises on
+    permission errors; never logs values.
+    """
     try:
         from dotenv import load_dotenv
     except ImportError:
-        return
+        return False
+    path = env_path if env_path is not None else repo_root_env_path()
+    if not path.is_file():
+        return False
     try:
-        load_dotenv()
+        load_dotenv(path, override=False)
     except PermissionError:
-        pass
+        return False
+    return True
+
+
+def validate_hydration_safety_env() -> str | None:
+    """
+    When NO_SUBMIT / DRY_RUN / PAPER_ONLY are set, they must be fail-closed safe.
+
+    Missing flags preserve existing safe defaults (hydration remains read-only).
+    """
+    for name in _HYDRATION_SAFE_ENV_FLAGS:
+        raw = os.environ.get(name)
+        if raw is None:
+            continue
+        normalized = str(raw).strip().lower()
+        if not normalized:
+            continue
+        if normalized in _HYDRATION_SAFE_TRUTHY:
+            continue
+        return f"preflight_error:unsafe_env_flag:{name}"
+    return None
+
+
+def preflight_hydration_auth() -> str | None:
+    """Load repo `.env` then validate optional hydration safety flags."""
+    load_local_env()
+    return validate_hydration_safety_env()
 
 
 def _env_nonempty(name: str) -> str | None:
@@ -1175,6 +1211,7 @@ def resolve_market_data_api_keys() -> tuple[str, str] | None:
 
 
 def try_create_option_client() -> tuple[Any | None, str | None]:
+    load_local_env()
     creds = check_alpaca_market_data_credentials()
     if creds.credential_status != "READY":
         detail = creds.detail or "missing_credentials"
