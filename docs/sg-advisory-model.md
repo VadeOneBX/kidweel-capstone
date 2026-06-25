@@ -1,21 +1,24 @@
 # SpotGamma advisory model
 
-**Status:** TODO — stub for CLAUDE-FOOTING-C1 / claude-advisor skill.
+How **SpotGamma-oriented context** feeds advisory flags only—not payloads, gates, or transport.
 
-## Intended role
+## Canonical inputs (morning path)
 
-Describe how **SpotGamma-oriented context** (walls, gamma, skew summaries) feeds **advisory flags only**—not payloads, gates, or transport.
+| Input | Location |
+|-------|----------|
+| Normalized / feature context | manifest `context_artifact` (from ingestion + `qops.context`) |
+| Walls, gamma, skew in rows | Context CSV columns and `notes` KV (see ingest docs) |
+| Chain / OI enrichment | manifest `expressions_artifact`, optional `scripts/alpaca_fetch.py` JSON |
+| Risk outcomes | `data/processed/risk/<run_id>_risk_audit.csv` |
 
-Advisory may use supplied replay/enrichment artifacts when the coordinator attaches them. Missing data → report in `missing_context`; do not invent levels.
+There is **no** required repo file named `sg-context.md`. If the coordinator attaches a memo, reference that path in idea `source` fields.
+
+## Forbidden re-derivation
+
+Do not recompute `regime_label`, `confidence`, or `gamma_ratio` in advisory skills. Missing fields → `missing_context` and stop.
 
 ## Related
 
-- [advisory-group-layer.md](./advisory-group-layer.md)
-- [advisory-group-matrix.md](./advisory-group-matrix.md)
-- [claude-advisor-context.md](./claude-advisor-context.md)
-- Ingestion docs: [spotgamma-to-replay.md](./spotgamma-to-replay.md) (context only; do not expand scope here)
-
-## TODO
-
-- Document allowed advisory inputs vs forbidden re-derivation (`regime_label`, `confidence`, `gamma_ratio`)
-- Align with [system-identity.md](./system-identity.md) ML/subagent policy
+- [spotgamma-to-replay.md](./spotgamma-to-replay.md) (ingestion; context only)
+- [docs/skills/](./skills/) (post-ORB idea templates)
+- [system-identity.md](./system-identity.md)

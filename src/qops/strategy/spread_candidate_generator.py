@@ -172,6 +172,20 @@ def load_greeks_quote_rows(path: str | Path) -> list[StagedGreeksQuoteRow]:
     return out
 
 
+def quote_rows_from_greeks_candidates(
+    rows: list[AlpacaGreeksCandidateRow],
+) -> list[StagedGreeksQuoteRow]:
+    """Convert in-memory greeks staging rows to spread-pairing inputs (bid/ask required)."""
+    out: list[StagedGreeksQuoteRow] = []
+    for q in rows:
+        if q.current_price is None or q.current_price <= 0:
+            continue
+        if q.bid is None or q.ask is None:
+            continue
+        out.append(StagedGreeksQuoteRow(quote=q, probability_of_profit=None))
+    return out
+
+
 def _dte_between(trade_date: str, expiration: str) -> int:
     td = date.fromisoformat(trade_date.strip())
     exp = date.fromisoformat(expiration.strip())

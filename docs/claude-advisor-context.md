@@ -2,13 +2,15 @@
 
 How the **claude-advisor** skill fits Kidweel: the only **interpretive** project skill in [SUBAGENCY-PROOF-C1](./subagency-proof.md).
 
-**Reference docs for this skill:** See [subagency-proof.md — Skill reference map](./subagency-proof.md#skill-reference-map) and [CLAUDE.md](../CLAUDE.md). Advisory stubs: [advisory-group-layer.md](./advisory-group-layer.md), [advisory-group-matrix.md](./advisory-group-matrix.md), [sg-advisory-model.md](./sg-advisory-model.md).
+**Reference docs for this skill:** [subagency-proof.md — Skill reference map](./subagency-proof.md#skill-reference-map) and [CLAUDE.md](../CLAUDE.md). Post-ORB skills: [skills/README.md](./skills/README.md). Group map: [advisory-group-matrix.md](./advisory-group-matrix.md). SpotGamma inputs: [sg-advisory-model.md](./sg-advisory-model.md).
 
 - `docs/claude-advisor-context.md` (this file)
+- `docs/skills/README.md` and `docs/skills/claude-advisor-distillation.md` (when packet is post-ORB / AGENT-SKILLS-C2)
 - `docs/system-identity.md`
 - `docs/spread-candidate-generation.md`
 - `docs/paper-approval-candidates.md`
 - `docs/paper-closeout.md`
+- `docs/evidence_artifacts_guide.md` (morning artifact paths; post-ORB chain)
 - **Supplied live/context data** (coordinator packet only)
 
 The skill may only use these docs plus delegated packet context. Insufficient information → report missing context and stop. Do not infer architecture, invent implementation details, or broaden scope.
@@ -89,3 +91,13 @@ The coordinator should attach:
 3. Explicit reference docs per [subagency-proof.md](./subagency-proof.md#skill-reference-map) (defaults listed in [claude-advisor-context.md](./claude-advisor-context.md))
 
 Without (1), the skill reports missing data and stops.
+
+---
+
+## Post-ORB advisory vs. backtest blueprint (AGENT-SKILLS-C2)
+
+Morning and post-ORB review use the **operator artifact chain** ([evidence_artifacts_guide.md](./evidence_artifacts_guide.md)): ORB manifest → context / candidates / expressions → risk audit → `claude_brief` → optional Tier 3 `*_ideas.json` distillation ([skills/claude-advisor-distillation.md](./skills/claude-advisor-distillation.md)).
+
+Claude Advisor must **not** point coordinators at **C4A blueprint replay** Python examples or `alpaca_blueprint_replay_plan.csv` unless the packet is explicitly a backtest / replay packet. Those tools plan historical SG-BT windows; they do not produce post-ORB idea votes or replace `scripts/orb_morning_loop.py` outputs.
+
+For chain/OI reads on the advisory path, use manifest-linked **context** and **expressions** artifacts, or read-only `scripts/alpaca_fetch.py`—not `examples/alpaca_blueprint_replay_inputs.py`.
