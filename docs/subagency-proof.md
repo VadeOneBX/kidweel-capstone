@@ -64,7 +64,7 @@ If the reference docs do not contain enough information, the skill must **report
 | **repo-cleaner** | `README.md`, `docs/notebook-alignment.md`, `docs/system-identity.md`, `docs/alpaca-paper-bridge.md`, `docs/paper-closeout.md` |
 | **readme-editor** | `June26 Kidweel Survivability.docx`, `README.md`, `docs/system-identity.md`, `docs/notebook-alignment.md`, `docs/paper-payload-candidates.md`, `docs/alpaca-paper-bridge.md`, `docs/paper-closeout.md`, `docs/subagency-proof.md` |
 | **safety-auditor** | `.env.example`, `.gitignore`, `docs/alpaca-paper-bridge.md`, `docs/paper-closeout.md`, `docs/system-identity.md`, `tests/test_alpaca_paper_bridge.py`, `tests/test_paper_closeout.py` |
-| **claude-advisor** | `docs/claude-advisor-context.md`, `docs/advisory-group-layer.md`, `docs/advisory-group-matrix.md`, `docs/sg-advisory-model.md`, `docs/system-identity.md`, `docs/spread-candidate-generation.md`, `docs/paper-approval-candidates.md`, `docs/paper-closeout.md`, **supplied live/context data** (coordinator packet only) |
+| **claude-advisor** | `docs/claude-advisor-context.md`, `docs/evidence_artifacts_guide.md`, `docs/skills/README.md`, `docs/skills/claude-advisor-distillation.md`, `docs/advisory-group-matrix.md`, `docs/sg-advisory-model.md`, `docs/advisory-group-layer.md`, `docs/system-identity.md`, `docs/spread-candidate-generation.md`, `docs/paper-approval-candidates.md`, `docs/paper-closeout.md`, **supplied live/context data** (coordinator packet only) |
 
 If a listed file is absent from the workspace, the skill reports it as missing context and stops—not an invitation to substitute other sources.
 
@@ -91,7 +91,8 @@ flowchart TB
 
   safety_auditor --> sa_refs[".env.example · .gitignore · alpaca-paper-bridge · paper-closeout · system-identity · test_alpaca_paper_bridge"]
 
-  claude_advisor --> ca_refs["claude-advisor-context · system-identity · spread-candidate-generation · paper-approval-candidates · paper-closeout"]
+  claude_advisor --> ca_skills["skills/README · claude-advisor-distillation · evidence_artifacts_guide"]
+  claude_advisor --> ca_refs["claude-advisor-context · advisory-group-matrix · sg-advisory-model · system-identity · spread-candidate-generation · paper-approval-candidates · paper-closeout"]
   claude_advisor --> ca_live["Supplied live/context data packet"]
   ca_live --> ca_refs
 ```

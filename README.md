@@ -174,3 +174,31 @@ Before sharing artifacts externally, run the privacy grep in [docs/claude_code_a
 ```bash
 PYTHONPATH=src python -m pytest tests -q
 ```
+
+**Paper path**
+
+<p>
+  <a href="./docs/alpaca-paper-bridge.md"><img src="https://img.shields.io/badge/Paper_bridge-1e3a5f?style=for-the-badge" alt="Alpaca paper bridge"/></a>
+  <a href="./docs/paper-closeout.md"><img src="https://img.shields.io/badge/Mleg_closeout-1e3a5f?style=for-the-badge" alt="Paper closeout"/></a>
+  <a href="./docs/paper-order-status-audit.md"><img src="https://img.shields.io/badge/Order_status_audit-1e3a5f?style=for-the-badge" alt="Order status audit"/></a>
+  <a href="./docs/notebook-alignment.md"><img src="https://img.shields.io/badge/Notebook_alignment-1e3a5f?style=for-the-badge" alt="Notebook alignment"/></a>
+</p>
+
+**Claude & advisory**
+
+<p>
+  <a href="./docs/claude-advisor-context.md"><img src="https://img.shields.io/badge/Claude_advisor-4c1d95?style=for-the-badge" alt="Claude advisor context"/></a>
+  <a href="./docs/advisory-group-matrix.md"><img src="https://img.shields.io/badge/Advisory_groups-4c1d95?style=for-the-badge" alt="Advisory group matrix"/></a>
+  <a href="./docs/evidence_artifacts_guide.md"><img src="https://img.shields.io/badge/Evidence_artifacts-4c1d95?style=for-the-badge" alt="Evidence artifacts guide"/></a>
+  <a href="./docs/claude-overlay.md"><img src="https://img.shields.io/badge/Claude_overlay-4c1d95?style=for-the-badge" alt="Claude overlay"/></a>
+  <a href="./docs/claude-backtest-wiring.md"><img src="https://img.shields.io/badge/Claude_backtest-4c1d95?style=for-the-badge" alt="Claude backtest wiring"/></a>
+</p>
+
+**Integrations & diagrams**
+
+<p>
+  <a href="./integrations/alpaca_mcp/README.md"><img src="https://img.shields.io/badge/Alpaca_MCP-14532d?style=for-the-badge" alt="Alpaca MCP README"/></a>
+  <a href="./integrations/alpaca_mcp/transport_contract.md"><img src="https://img.shields.io/badge/C10A_transport-14532d?style=for-the-badge" alt="C10A transport contract"/></a>
+  <a href="./diagrams/claude_context_layer.md"><img src="https://img.shields.io/badge/Context_layer-14532d?style=for-the-badge" alt="Context layer"/></a>
+  <a href="./diagrams/system_operating_loop.svg"><img src="https://img.shields.io/badge/System_loop_diagram-14532d?style=for-the-badge" alt="System operating loop SVG"/></a>
+</p>

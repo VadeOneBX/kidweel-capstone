@@ -7,6 +7,14 @@ from pathlib import Path
 import pandas as pd
 from pydantic import BaseModel
 
+from qops.advisory.am_note_gate import (
+    apply_am_note_paper_gate_to_audit,
+    build_macro_paper_gate,
+)
+from qops.advisory.expression_frontier import (
+    apply_frontier_paper_gate_to_audit,
+    build_expression_frontier,
+)
 from qops.playbooks.selector import select_allowed_playbook
 from qops.risk.paper_approval import (
     build_paper_approval_candidates,
@@ -642,6 +650,8 @@ def run_risk_guard(
     paper_only: bool = True,
     *,
     context_artifact: str | None = None,
+    staged_files: list[str] | None = None,
+    expressions_artifact: str | None = None,
 ) -> RiskGuardResult:
     if not paper_only:
         raise RuntimeError("PAPER_ONLY_REQUIRED")
@@ -664,6 +674,28 @@ def run_risk_guard(
             context_artifact=context_artifact,
         )
 
+    macro_gate = build_macro_paper_gate(
+        base_dir,
+        run_id=run_id,
+        staged_files=staged_files,
+    )
+    audit_df = apply_am_note_paper_gate_to_audit(audit_df, macro_gate)
+
+    expressions_df = pd.DataFrame()
+    expr_path = Path(expressions_artifact or "")
+    if expr_path.is_file():
+        expressions_df = pd.read_csv(expr_path)
+        if run_id and "run_id" in expressions_df.columns:
+            expressions_df = expressions_df[
+                expressions_df["run_id"].astype(str) == str(run_id)
+            ]
+    frontier = build_expression_frontier(
+        expressions_df,
+        base_dir=base_dir,
+        run_id=run_id,
+    )
+    audit_df = apply_frontier_paper_gate_to_audit(audit_df, frontier)
+
     audit_df.to_csv(risk_path, index=False)
     return RiskGuardResult(risk_audit_artifact=str(risk_path))
 
@@ -681,6 +713,12 @@ def summarize_risk_audit(path: str | Path) -> dict[str, object]:
     counts = Counter(str(v) for v in df[col].fillna(""))
 
     approved = counts.get("APPROVED_PAPER", 0) + counts.get("APPROVED_FOR_PAPER_REVIEW", 0)
+    paper_gate_withheld = counts.get("PAPER_GATE_WITHHELD", 0)
+    frontier_withheld = sum(
+        1
+        for v in df.get("reject_reason", pd.Series(dtype=str)).fillna("")
+        if str(v) == "paper_gate:frontier_review_required"
+    )
     parked = (
         counts.get("PARKED_REVIEW", 0)
         + counts.get("PARKED", 0)
@@ -774,6 +812,8 @@ def summarize_risk_audit(path: str | Path) -> dict[str, object]:
     return {
         "total_candidates": len(df),
         "approved_paper_only": approved,
+        "paper_gate_withheld_am_note": paper_gate_withheld,
+        "paper_gate_withheld_frontier": frontier_withheld,
         "parked": parked,
         "rejected": rejected,
         "incomplete": incomplete,

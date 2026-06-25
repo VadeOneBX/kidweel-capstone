@@ -5,6 +5,17 @@ from pathlib import Path
 import pandas as pd
 from pydantic import BaseModel
 
+from qops.advisory.expression_frontier import (
+    SymbolFrontierSummary,
+    format_expression_frontier_section,
+)
+from qops.advisory.idea_distillation import (
+    distill_subagent_ideas,
+    format_policy_votes_section,
+)
+from qops.advisory.run_advisory import build_run_advisory, format_spread_skeptic_section
+from qops.advisory.spread_skeptic import SpreadSkepticNote
+from qops.advisory.subagent_ideas import load_tier3_ideas
 from qops.pipeline.alpaca_hydration_loop import summarize_expression_artifact
 from qops.risk.guard_runner import summarize_risk_audit
 from qops.runtime.orb_manifest import OrbRunManifest
@@ -35,17 +46,42 @@ def generate_claude_brief(
         raise RuntimeError(f"ADVISORY_BLOCKED_MISSING_ARTIFACTS:{missing}")
 
     summary = summarize_risk_audit(manifest.risk_audit_artifact or "")
+    run_advisory_result = build_run_advisory(base_dir, manifest)
+    advisory_payload = run_advisory_result.run_advisory
+
     expressions_path = Path(manifest.expressions_artifact or "")
     if not expressions_path.is_file() and manifest.run_id:
         from qops.pipeline.alpaca_hydration_loop import expressions_artifact_path
 
         expressions_path = expressions_artifact_path(base_dir, manifest.run_id)
     expr_summary: dict[str, int] = {}
+    expr_df = pd.DataFrame()
     if expressions_path.is_file():
         expr_df = pd.read_csv(expressions_path)
         if manifest.run_id and "run_id" in expr_df.columns:
             expr_df = expr_df[expr_df["run_id"].astype(str) == str(manifest.run_id)]
         expr_summary = summarize_expression_artifact(expr_df)
+
+    skeptic_raw = advisory_payload.get("spread_skeptic_notes", [])
+    skeptic_notes = [
+        SpreadSkepticNote(**item) for item in skeptic_raw if isinstance(item, dict)
+    ]
+    frontier_raw = advisory_payload.get("expression_frontier_summaries", [])
+    frontier_summaries = [
+        SymbolFrontierSummary(**item) for item in frontier_raw if isinstance(item, dict)
+    ]
+
+    context_df = pd.read_csv(manifest.context_artifact or "")
+    tier3_artifacts = load_tier3_ideas(base_dir, manifest.run_date, manifest.run_id)
+    distillation = distill_subagent_ideas(
+        tier3_artifacts,
+        regime_label=str(summary.get("regime_label", "") or ""),
+        context_df=context_df,
+        expressions_df=expr_df,
+    )
+    if distillation.blocked:
+        raise RuntimeError(distillation.block_reason)
+    idea_votes_section = format_policy_votes_section(distillation)
 
     advisory_dir = base_dir / "data/advisory"
     advisory_dir.mkdir(parents=True, exist_ok=True)
@@ -53,11 +89,50 @@ def generate_claude_brief(
     advisory_path = advisory_dir / f"{manifest.run_id}_claude_brief.md"
     latest_path = advisory_dir / "latest_claude_brief.md"
 
+    am_required = advisory_payload.get("am_note_required_before_paper", True)
+    macro_summary = str(advisory_payload.get("macro_context_summary", ""))
+    dealer_summary = str(advisory_payload.get("dealer_positioning_summary", ""))
+    catalyst_summary = str(advisory_payload.get("macro_catalyst_summary", ""))
+    spread_posture = str(advisory_payload.get("spread_posture", ""))
+    pre_am = advisory_payload.get("pre_am_structure", {})
+    dealer_struct = advisory_payload.get("dealer_structure", {})
+
+    policy_line = (
+        "**No AM note, no paper approval.** Raw context finds the board. "
+        "The AM note explains the board. The advisor decides whether the spread deserves attention."
+    )
+
     body = f"""# Kidweel Morning Brief
 
 Run ID: `{manifest.run_id}`  
 Run status: `{manifest.status}`  
 Mode: `{manifest.mode}`
+
+## Macro context gate (AM Founder note)
+
+{policy_line}
+
+| Field | Value |
+|-------|-------|
+| `am_note_status` | `{advisory_payload.get("am_note_status", "")}` |
+| `macro_context_state` | `{advisory_payload.get("macro_context_state", "")}` |
+| `paper_gate_macro_status` | `{advisory_payload.get("paper_gate_macro_status", "")}` |
+| `am_note_required_before_paper` | `{am_required}` |
+
+**Macro context:** {macro_summary}
+
+**Dealer positioning:** {dealer_summary or dealer_struct.get("structure_summary", "")}
+
+**Catalysts:** {catalyst_summary or "(none parsed)"}
+
+**Spread posture:** {spread_posture}
+
+**Pre-AM structure (retained when note arrives):** {pre_am.get("pre_note_advisory_summary", "") if isinstance(pre_am, dict) else ""}
+
+Dealer structure bias (pre-AM): `{dealer_struct.get("advisory_bias", "") if isinstance(dealer_struct, dict) else ""}`  
+Gamma regime: `{dealer_struct.get("gamma_regime", "") if isinstance(dealer_struct, dict) else ""}`
+
+Run advisory JSON: `{run_advisory_result.advisory_json_artifact}`
 
 ## Intake
 
@@ -69,6 +144,8 @@ Mode: `{manifest.mode}`
 
 - Total candidates: {summary.get("total_candidates", 0)}
 - Approved (paper-only review): {summary.get("approved_paper_only", 0)}
+- Paper gate withheld (AM note): {summary.get("paper_gate_withheld_am_note", 0)}
+- Paper gate withheld (frontier review): {summary.get("paper_gate_withheld_frontier", 0)}
 - Parked for review: {summary.get("parked", 0)}
 - Reverse-vrp symbol context rows: {summary.get("reverse_vrp_symbol_context_rows", 0)}
 - Context gate rejects: {summary.get("context_gate_rejects", 0)}
@@ -107,6 +184,23 @@ Mode: `{manifest.mode}`
 - Regime label: `{summary.get("regime_label", "")}`
 - Structure bias: `{summary.get("structure_bias", "")}`
 
+## Expression frontier review
+
+Selected is not optimal. Attractive is not approved.
+
+Frontier review required: `{advisory_payload.get("frontier_review_required_before_paper", False)}`  
+Artifact: `{advisory_payload.get("expression_frontier_artifact", "")}`
+
+{format_expression_frontier_section(frontier_summaries)}
+
+## Spread skeptic review
+
+Attractive is not approved. Selected is not optimal. Rejected is not broken.
+
+{format_spread_skeptic_section(skeptic_notes)}
+
+{idea_votes_section}
+
 ## Guardrails
 
 - Live mode enabled: `{manifest.live_mode_enabled}`
@@ -114,9 +208,8 @@ Mode: `{manifest.mode}`
 
 ## Advisory
 
-Market context has been established from deterministic ingestion artifacts.
-
-The risk guard classified the candidate set.
+Context incomplete until the AM Founder note is parsed unless manual override is recorded.
+Hydration and expression frontier review may continue; paper approval is withheld when required.
 
 The operator reviews the audit artifact paths below.
 

@@ -1,5 +1,7 @@
 # Kidweel Operator Commands
 
+Remote scheduling, Tailscale/SSH, push notifications, Docker cron templates, and paper reconcile: [connectors_c1_runbook.md](./connectors_c1_runbook.md).
+
 ## Check manual upload folder
 
 ```bash
@@ -40,6 +42,14 @@ PYTHONPATH=src python scripts/operator_status.py --base-dir .
 
 ```bash
 cat data/advisory/latest_claude_brief.md
+grep -A 3 "vote:" data/advisory/latest_claude_brief.md
+```
+
+## Post-ORB idea artifacts (Tier 3)
+
+```bash
+find data/runs -name "*_ideas.json" | sort | tail -n 5
+PYTHONPATH=src python scripts/operator_status.py --base-dir . --ideas-summary
 ```
 
 ## View latest notification payload

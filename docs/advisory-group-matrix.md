@@ -1,26 +1,23 @@
 # Advisory group matrix
 
-**Status:** TODO — stub for CLAUDE-FOOTING-C1 / claude-advisor skill.
+Maps coordinator-supplied context to **one primary group** for claude-advisor labeling (`selected_group`). Post-ORB idea templates live under [docs/skills/](./skills/). Not approval or sizing.
 
-## Groups (names only)
+## Groups
 
-| Group | Purpose (TODO) |
-|-------|----------------|
-| `SQUEEZE_CANDIDATES` | TODO: define thesis and required context fields |
-| `VOLATILITY_RISK_PREMIUM` | TODO: define thesis and required context fields |
-| `REVERSE_RISK_PREMIUM` | TODO: define thesis and required context fields |
+| Group | Idea skill (3 ideas post-ORB) | Thesis (summary) |
+|-------|-------------------------------|------------------|
+| `SQUEEZE_CANDIDATES` | [skills/squeeze-candidates.md](./skills/squeeze-candidates.md) | Walls, gamma concentration, ORB breach vs. trend |
+| `VOLATILITY_RISK_PREMIUM` | [skills/volatility-risk-premium.md](./skills/volatility-risk-premium.md) | VRP richness, skew direction, wall + VRP alignment |
+| `REVERSE_RISK_PREMIUM` | [skills/reverse-risk-premium.md](./skills/reverse-risk-premium.md) | Cheap vol, catalyst proximity, implied move vs. debit |
 
-## Intended role
+## Distillation (deterministic)
 
-Map coordinator-supplied context to **one primary group** for advisory labeling (`selected_group` in claude-advisor response). Not an approval or sizing matrix.
+Repo-owned: `qops.advisory.idea_distillation` → policy votes in `data/advisory/<run_id>_claude_brief.md`. See [skills/claude-advisor-distillation.md](./skills/claude-advisor-distillation.md).
+
+Claude-advisor **interprets** votes and may emit `ADVISORY_*`; it does not replace distillation math or gates.
 
 ## Related
 
 - [advisory-group-layer.md](./advisory-group-layer.md)
 - [sg-advisory-model.md](./sg-advisory-model.md)
-- [.claude/skills/claude-advisor/SKILL.md](../.claude/skills/claude-advisor/SKILL.md)
-
-## TODO
-
-- Fill signal columns from approved STRUCTURE/POLICY packets only
-- Do not add schema fields without an implementation packet
+- [evidence_artifacts_guide.md](./evidence_artifacts_guide.md)

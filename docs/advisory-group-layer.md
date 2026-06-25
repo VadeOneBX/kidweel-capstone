@@ -1,21 +1,20 @@
 # Advisory group layer
 
-**Status:** TODO — stub for CLAUDE-FOOTING-C1 / claude-advisor skill.
-
-## Intended role
-
-Place **interpretive advisory** above deterministic gates without granting execution authority. Advisory output informs coordinator review; spread math, approval, and transport remain repo-owned.
+Interpretive advisory above deterministic gates—**no execution authority**. Spread math, approval, and transport stay repo-owned.
 
 **Claude proposes; the system decides; transport executes.**
 
+## Layers
+
+| Layer | Owner | Output |
+|-------|--------|--------|
+| Tier 3 idea skills | Subagents (packet-scoped) | `data/runs/<date>/<run_id>_<agent>_ideas.json` |
+| Idea distillation | `qops.advisory.idea_distillation` | Policy `vote:` blocks in `claude_brief` |
+| claude-advisor skill | Coordinator invocation | `ADVISORY_*` + memo from **supplied** artifacts |
+
 ## Related
 
-- Skill: [.claude/skills/claude-advisor/SKILL.md](../.claude/skills/claude-advisor/SKILL.md)
+- [docs/skills/README.md](./skills/README.md) (AGENT-SKILLS-C2 index)
+- [advisory-group-matrix.md](./advisory-group-matrix.md)
 - [claude-advisor-context.md](./claude-advisor-context.md)
-- [advisory-group-matrix.md](./advisory-group-matrix.md) (TODO matrix)
-- [sg-advisory-model.md](./sg-advisory-model.md) (TODO SpotGamma inputs)
-
-## TODO
-
-- Document how advisory groups layer on playbook/structure without mutating gates
-- Cross-link approved POLICY/STRUCTURE packets when published
+- [.claude/skills/claude-advisor/SKILL.md](../.claude/skills/claude-advisor/SKILL.md)
