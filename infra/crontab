@@ -1,0 +1,4 @@
+CRON_TZ=America/New_York
+
+0,15,30,45 9 * * 1-5 cd /app && env PYTHONPATH=/app/src python scripts/orb_morning_loop.py --mode orb-watchdog >> /app/logs/ingestion_scheduler.log 2>&1
+0 10 * * 1-5 cd /app && env PYTHONPATH=/app/src python scripts/orb_morning_loop.py --mode orb-final >> /app/logs/ingestion_scheduler.log 2>&1

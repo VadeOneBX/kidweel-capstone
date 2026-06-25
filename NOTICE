@@ -1,0 +1,13 @@
+Kidweel GEX Automation — capstone repository
+
+Copyright (c) Wes Adams. All rights reserved unless otherwise stated in a
+specific file or approved governance packet.
+
+You may view and review this repository for portfolio, educational, and
+interview purposes. No license is granted to use the software to operate
+live trading, to redistribute modified copies as a product, or to remove
+attribution, except with explicit written permission or a future license
+file adopted by the project.
+
+Paper-only decision infrastructure: no live trading support is provided or
+implied. See README.md and docs/public_readiness.md.

@@ -7,7 +7,6 @@ __pycache__/
 
 
 # runtime / outputs
-logs/
 backtest_exports/
 data/cache/
 data/backtests/
@@ -236,8 +235,12 @@ __marimo__/
 .DS_Store
 
 # ---- Project runtime data (keep structure, ignore contents) ----
-data/*
-!data/.gitkeep
+data/**
+!data/**/
+!data/**/.gitkeep
+
+logs/*
+!logs/.gitkeep
 
 # Cursor
 .cursor/
@@ -254,3 +257,7 @@ model.joblib
 
 /June26 Kidweel Survivability.docx
 
+
+# Local MCP configs with secrets
+.cursor/mcp.json
+.claude/settings.json
