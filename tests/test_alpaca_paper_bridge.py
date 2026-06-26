@@ -31,6 +31,7 @@ from qops.execution.alpaca_paper_bridge import (
     validate_paper_endpoint,
 )
 from qops.execution.mcp_response import normalize_mcp_response
+from qops.execution.hitl_paper_transport import apply_operator_decision, load_or_create_approval
 from qops.execution.paper_payload_candidate import PaperPayloadCandidate
 from qops.schemas.playbook import AllowedPlaybook
 
@@ -69,6 +70,16 @@ def _ready_payload(**overrides: object) -> PaperPayloadCandidate:
     )
     base.update(overrides)
     return PaperPayloadCandidate(**base)  # type: ignore[arg-type]
+
+
+def _hitl_approve(payload: PaperPayloadCandidate, base_dir: Path) -> None:
+    load_or_create_approval(payload, base_dir=base_dir)
+    apply_operator_decision(
+        payload.payload_id,
+        "approve",
+        "test_operator_approved",
+        base_dir=base_dir,
+    )
 
 
 def test_filter_only_ready() -> None:
@@ -142,7 +153,9 @@ def test_submit_mode_defaults_limit_to_one() -> None:
     assert effective_transport_limit(submit_paper=True, limit=5) == 5
 
 
-def test_submit_uses_injected_fn() -> None:
+def test_submit_uses_injected_fn(tmp_path: Path) -> None:
+    payload = _ready_payload()
+    _hitl_approve(payload, tmp_path)
     def fake_submit(
         _creds: AlpacaPaperCredentials,
         _payload: PaperPayloadCandidate,
@@ -166,10 +179,11 @@ def test_submit_uses_injected_fn() -> None:
         return_value=creds,
     ):
         results, fatal = run_paper_payload_transport(
-            [_ready_payload()],
+            [payload],
             submit_paper=True,
             limit=1,
             submit_fn=fake_submit,
+            base_dir=tmp_path,
         )
     assert fatal is None
     assert results[0].transport_status == "PAPER_SUBMITTED"
@@ -247,7 +261,7 @@ def test_non_ready_not_in_dry_run_results() -> None:
 
 
 @patch("alpaca.trading.client.TradingClient")
-def test_submit_alpaca_paper_mleg_order_maps_response(mock_client_cls: MagicMock) -> None:
+def test_submit_alpaca_paper_mleg_order_maps_response(mock_client_cls: MagicMock, tmp_path: Path) -> None:
     from alpaca.trading.enums import OrderStatus
 
     order = MagicMock()
@@ -261,7 +275,9 @@ def test_submit_alpaca_paper_mleg_order_maps_response(mock_client_cls: MagicMock
         base_url=CANONICAL_PAPER_BASE_URL,
         env_pair_label="ALPACA_PAPER_*",
     )
-    raw = submit_alpaca_paper_mleg_order(creds, _ready_payload())
+    payload = _ready_payload()
+    _hitl_approve(payload, tmp_path)
+    raw = submit_alpaca_paper_mleg_order(creds, payload, base_dir=tmp_path)
     normalize_mcp_response(raw)
     mock_client_cls.assert_called_once()
     call_kwargs = mock_client_cls.call_args.kwargs
@@ -418,10 +434,13 @@ def test_market_data_pair_does_not_satisfy_paper_transport(monkeypatch: pytest.M
     assert check.detail == "no_paper_credential_triplet"
 
 
-def test_env_triplet_submit_path_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_env_triplet_submit_path_unchanged(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("ALPACA_PAPER_API_KEY", "key")
     monkeypatch.setenv("ALPACA_PAPER_SECRET_KEY", "secret")
     monkeypatch.setenv("ALPACA_PAPER_BASE_URL", CANONICAL_PAPER_BASE_URL)
+
+    payload = _ready_payload()
+    _hitl_approve(payload, tmp_path)
 
     def fake_submit(_creds: AlpacaPaperCredentials, _payload: PaperPayloadCandidate) -> dict:
         return {
@@ -433,10 +452,11 @@ def test_env_triplet_submit_path_unchanged(monkeypatch: pytest.MonkeyPatch) -> N
         }
 
     results, fatal = run_paper_payload_transport(
-        [_ready_payload()],
+        [payload],
         submit_paper=True,
         limit=1,
         submit_fn=fake_submit,
+        base_dir=tmp_path,
     )
     assert fatal is None
     assert results[0].transport_status == "PAPER_SUBMITTED"
