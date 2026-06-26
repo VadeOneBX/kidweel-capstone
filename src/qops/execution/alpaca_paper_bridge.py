@@ -13,6 +13,11 @@ from typing import Callable, Literal, Protocol
 
 import pandas as pd
 
+from qops.execution.hitl_paper_transport import (
+    assert_hitl_paper_submit_allowed,
+    env_is_live,
+    evaluate_paper_transport_hitl,
+)
 from qops.execution.mcp_response import normalize_mcp_response
 from qops.execution.paper_payload_candidate import PaperPayloadCandidate, PayloadStatus
 from qops.runtime.execution_halt import assert_not_halted
@@ -607,6 +612,9 @@ def submit_alpaca_paper_mleg_order(
 ) -> dict:
     """Submit one multileg order to Alpaca paper (network I/O)."""
     assert_not_halted(base_dir or Path.cwd())
+    hitl_block = assert_hitl_paper_submit_allowed(payload, base_dir=base_dir)
+    if hitl_block is not None:
+        return transport_error_raw(hitl_block)
     endpoint_ok, detail = validate_paper_endpoint(credentials.base_url)
     if not endpoint_ok:
         return transport_error_raw(detail)
@@ -674,17 +682,49 @@ def run_paper_payload_transport(
 
     assert_not_halted(base_dir or Path.cwd())
 
+    if env_is_live():
+        return results, "LIVE_ENV_FORBIDDEN"
+
     credentials = resolve_alpaca_paper_credentials(require_paper_endpoint=require_paper_endpoint)
     if credentials is None:
         check = check_alpaca_paper_credentials(require_paper_endpoint=require_paper_endpoint)
         reason = check.detail or check.endpoint_detail or "paper_credentials_not_ready"
         return results, reason
 
-    submit_callable = submit_fn or submit_alpaca_paper_mleg_order
+    def _invoke_submit(credentials: AlpacaPaperCredentials, payload: PaperPayloadCandidate) -> dict:
+        if submit_fn is not None:
+            return submit_fn(credentials, payload)
+        return submit_alpaca_paper_mleg_order(credentials, payload, base_dir=base_dir)
 
     for payload in ready:
+        hitl_gate = evaluate_paper_transport_hitl(
+            payload,
+            candidate_passed_existing_gates=True,
+            base_dir=base_dir,
+        )
+        if not hitl_gate.paper_submit_allowed:
+            results.append(
+                PaperTransportResult(
+                    payload_id=payload.payload_id,
+                    approval_id=payload.approval_id,
+                    symbol=payload.symbol,
+                    structure_type=payload.structure_type,
+                    transport_status="PAPER_SKIPPED",
+                    dry_run=False,
+                    broker_mode="paper",
+                    external_order_id=None,
+                    accepted=False,
+                    status=hitl_gate.status.lower(),
+                    message=hitl_gate.detail,
+                    submitted_at=None,
+                    failure_reasons=hitl_gate.status,
+                    provenance=PROVENANCE_TAG,
+                )
+            )
+            continue
+
         submitted_at = _utc_now_iso()
-        raw = submit_callable(credentials, payload)
+        raw = _invoke_submit(credentials, payload)
         try:
             normalized = normalize_mcp_response(raw)
         except ValueError as exc:
