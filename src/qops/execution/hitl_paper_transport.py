@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any
 
 from qops.execution.paper_payload_candidate import PaperPayloadCandidate
+from qops.guardrails.base import evaluate_guardrails
+from qops.guardrails.tool_payload import guardrail_candidate_from_paper_payload
 from qops.schemas.hitl import (
     DEFAULT_ACTION_WITHOUT_APPROVAL,
     HITL_PACKET,
@@ -296,6 +298,14 @@ def assert_hitl_paper_submit_allowed(
     base_dir: Path | None = None,
 ) -> str | None:
     """Return error detail when submit must not proceed; None when allowed."""
+    guardrail_result = evaluate_guardrails(
+        guardrail_candidate_from_paper_payload(payload),
+        base_dir=base_dir,
+        write_audit=False,
+    )
+    if not guardrail_result.ok:
+        return f"guardrail_blocked:{guardrail_result.reason_code or guardrail_result.status}:{guardrail_result.message}"
+
     gate = evaluate_paper_transport_hitl(
         payload,
         candidate_passed_existing_gates=payload.payload_status == "PAPER_PAYLOAD_READY",

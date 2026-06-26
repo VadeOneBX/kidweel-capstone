@@ -17,7 +17,14 @@ from qops.execution.hitl_paper_transport import (
     assert_hitl_paper_submit_allowed,
     env_is_live,
     evaluate_paper_transport_hitl,
+    load_or_create_approval,
 )
+from qops.guardrails.base import (
+    evaluate_guardrails,
+    guardrails_allow_hitl,
+)
+from qops.guardrails.tool_payload import guardrail_candidate_from_paper_payload
+from qops.schemas.hitl import STATUS_WATCH_PENDING_REVIEW
 from qops.execution.mcp_response import normalize_mcp_response
 from qops.execution.paper_payload_candidate import PaperPayloadCandidate, PayloadStatus
 from qops.runtime.execution_halt import assert_not_halted
@@ -697,6 +704,52 @@ def run_paper_payload_transport(
         return submit_alpaca_paper_mleg_order(credentials, payload, base_dir=base_dir)
 
     for payload in ready:
+        guardrail_candidate = guardrail_candidate_from_paper_payload(payload)
+        guardrail_result = evaluate_guardrails(guardrail_candidate, base_dir=base_dir)
+        if not guardrail_result.ok:
+            if guardrail_result.status == STATUS_WATCH_PENDING_REVIEW:
+                load_or_create_approval(payload, base_dir=base_dir)
+            results.append(
+                PaperTransportResult(
+                    payload_id=payload.payload_id,
+                    approval_id=payload.approval_id,
+                    symbol=payload.symbol,
+                    structure_type=payload.structure_type,
+                    transport_status="PAPER_SKIPPED",
+                    dry_run=False,
+                    broker_mode="paper",
+                    external_order_id=None,
+                    accepted=False,
+                    status=guardrail_result.status.lower(),
+                    message=guardrail_result.message,
+                    submitted_at=None,
+                    failure_reasons=guardrail_result.reason_code or guardrail_result.status,
+                    provenance=PROVENANCE_TAG,
+                )
+            )
+            continue
+
+        if not guardrails_allow_hitl(guardrail_result):
+            results.append(
+                PaperTransportResult(
+                    payload_id=payload.payload_id,
+                    approval_id=payload.approval_id,
+                    symbol=payload.symbol,
+                    structure_type=payload.structure_type,
+                    transport_status="PAPER_SKIPPED",
+                    dry_run=False,
+                    broker_mode="paper",
+                    external_order_id=None,
+                    accepted=False,
+                    status="clean_reject",
+                    message="guardrails_blocked_hitl",
+                    submitted_at=None,
+                    failure_reasons="CLEAN_REJECT",
+                    provenance=PROVENANCE_TAG,
+                )
+            )
+            continue
+
         hitl_gate = evaluate_paper_transport_hitl(
             payload,
             candidate_passed_existing_gates=True,
