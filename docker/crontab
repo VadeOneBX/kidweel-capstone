@@ -1,0 +1,4 @@
+# Kidweel local scheduler.
+# Runs cron trigger every 15 minutes during market-adjacent hours.
+# The script must remain paper-only and dry-run by default.
+*/15 13-21 * * 1-5 cd /app && PYTHONPATH=src python scripts/cron_trigger.py --source supercronic --dry-run

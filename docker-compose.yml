@@ -1,0 +1,54 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: kidweel-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+
+  qops-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kidweel-qops-api
+    env_file:
+      - .env
+    environment:
+      QOPS_RUNTIME_MODE: local
+      QOPS_PAPER_ONLY: "true"
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "${QOPS_API_PORT:-8000}:8000"
+    volumes:
+      - .:/app
+      - ./data:/app/data
+      - ./logs:/app/logs
+    depends_on:
+      - redis
+    command: ["api"]
+
+  qops-cron:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kidweel-qops-cron
+    env_file:
+      - .env
+    environment:
+      QOPS_RUNTIME_MODE: local
+      QOPS_PAPER_ONLY: "true"
+      REDIS_URL: redis://redis:6379/0
+      QOPS_API_URL: http://qops-api:8000
+    volumes:
+      - .:/app
+      - ./data:/app/data
+      - ./logs:/app/logs
+    depends_on:
+      - redis
+      - qops-api
+    command: ["cron"]
+
+volumes:
+  redis-data:
