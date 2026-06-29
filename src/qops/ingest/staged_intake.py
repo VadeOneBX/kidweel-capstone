@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from qops.ingest.morning_regime_upgrade import is_morning_regime_workbook_path
 from qops.ingest.spotgamma_loader import (
     detect_csv_profile,
     is_spy_excel_filename,
@@ -30,8 +31,7 @@ _STAGED_DATE_PREFIX = re.compile(r"^(\d{4}-\d{2}-\d{2})_")
 
 
 def _is_morning_regime_narrative(path: Path) -> bool:
-    stem = path.stem.lower()
-    return stem == "morning_regime" or stem.endswith("_morning_regime")
+    return is_morning_regime_workbook_path(path)
 
 
 def session_date_from_staged_path(path: Path, fallback: str) -> str:

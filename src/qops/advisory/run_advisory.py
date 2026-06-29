@@ -14,6 +14,12 @@ from qops.advisory.am_note_gate import (
     PreAmStructureFields,
     build_macro_paper_gate,
     build_pre_am_structure_fields,
+    run_date_from_run_id,
+)
+from qops.ingest.morning_regime_upgrade import (
+    discover_upgraded_morning_regime_workbooks,
+    fast_advisory_candidate_to_dict,
+    run_morning_regime_intake,
 )
 from qops.advisory.dealer_structure import DealerStructureAssessment, assess_dealer_structure
 from qops.advisory.expression_frontier import (
@@ -105,6 +111,32 @@ def build_run_advisory(
         run_id=manifest.run_id,
     )
 
+    session_date = run_date_from_run_id(manifest.run_id)
+    staged = staged_files or manifest.staged_files
+    flow_intake_payload: dict[str, object] | None = None
+    morning_regime_audit_artifact = ""
+    morning_regime_workbooks = discover_upgraded_morning_regime_workbooks(
+        base_dir,
+        run_date=session_date,
+        staged_files=staged,
+    )
+    if morning_regime_workbooks:
+        intake, audit_path = run_morning_regime_intake(
+            base_dir,
+            morning_regime_workbooks[0],
+        )
+        morning_regime_audit_artifact = str(audit_path)
+        flow_intake_payload = {
+            "workbook": intake.workbook,
+            "workbook_format": "upgraded",
+            "sheets_found": intake.sheets_found,
+            "fast_advisory_candidates": [
+                fast_advisory_candidate_to_dict(c) for c in intake.fast_advisory_candidates
+            ],
+            "image_ocr_used": intake.image_ocr_used,
+            "paper_submission_status": "gated_not_submitted",
+        }
+
     advisory_dir = base_dir / "data/advisory"
     advisory_dir.mkdir(parents=True, exist_ok=True)
     frontier_csv = advisory_dir / f"{manifest.run_id}_expression_frontier.csv"
@@ -139,6 +171,11 @@ def build_run_advisory(
         "expression_frontier_rows": frontier.expression_rows,
         "expression_frontier_artifact": str(frontier_csv) if frontier_csv else "",
     }
+    if flow_intake_payload is not None:
+        payload["morning_regime_flow"] = flow_intake_payload
+        payload["morning_regime_audit_artifact"] = morning_regime_audit_artifact
+        payload["morning_regime_upgrade"] = flow_intake_payload
+        payload["morning_regime_upgrade_audit_artifact"] = morning_regime_audit_artifact
     if gate.parsed_note is not None:
         payload["am_note_parsed"] = asdict(gate.parsed_note)
 

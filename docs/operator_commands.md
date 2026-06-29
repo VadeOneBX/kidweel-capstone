@@ -41,6 +41,26 @@ ls -lah data/spotgamma/raw/$(date +%F)
 ls -lah data/spotgamma/inbox
 ```
 
+## Morning Regime workbook (daily)
+
+The upgraded Morning Regime is now the standard Morning Regime. Operators stage it as `morning_regime.xlsx`; the system detects upgraded tabs by sheet presence (`morning_regime`, `unusual_options_positions`, `stat_sig_positions`, `flow_candidates`). The `_UPGRADE` filename suffix is for tests and backward compatibility only—not a separate live intake path.
+
+```bash
+# Stage the daily Morning Regime workbook
+cp /path/to/raw/morning_regime.xlsx data/spotgamma/inbox/morning_regime.xlsx
+
+# Run morning wake / staging
+uv run python scripts/daily_ingestion_wake.py --mode manual --base-dir .
+
+# Run morning loop through advisory (pipeline, risk guard, run advisory JSON)
+uv run python scripts/orb_morning_loop.py --mode manual --base-dir .
+
+# Check Morning Regime flow audit (structured tabs; no OCR)
+cat logs/morning_regime_latest.json
+```
+
+`orb_morning_loop.py` runs ingestion wake again at loop start; that is expected. Fast advisory and the audit file are produced when the staged workbook includes the upgraded sheets. Paper submission remains gated by existing risk and macro gates.
+
 ## Run wake only
 
 ```bash
