@@ -1,6 +1,10 @@
 # Cursor Mobile Pack Contract
 
-Future Cursor packs may use the runtime layer only through explicit surfaces.
+**Cursor mobile** is the mobile implementation/review surface for Cursor agents: scoped repo edits and diff review in coordinator packets. It is not the operator runtime boundary and does not approve, submit, or bypass gates.
+
+Future Cursor mobile packs may use the runtime layer only through explicit surfaces below. **Claude mobile** is a separate review surface (artifact visibility); it does not share Cursor mobile's repo-edit scope unless a coordinator packet says otherwise.
+
+Taxonomy: [CLAUDE.md](../CLAUDE.md#surface-taxonomy-authority-matters).
 
 ## Allowed
 

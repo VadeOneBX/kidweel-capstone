@@ -1,6 +1,8 @@
 # Claude Advisor context
 
-How the **claude-advisor** skill fits Kidweel: the only **interpretive** project skill in [SUBAGENCY-PROOF-C1](./subagency-proof.md).
+How the **claude-advisor** repo skill/subagent fits Kidweel: the only **interpretive** project skill in [SUBAGENCY-PROOF-C1](./subagency-proof.md).
+
+**Not the same as:** **Claude.ai desktop** (operator review / future allowlisted commands), **Claude mobile** (review-only unless allowlisted), or **Claude Code / Cursor Claude** (IDE repo edits). Those surfaces do not replace claude-advisor labels or gain approval/transport authority.
 
 **Reference docs for this skill:** [subagency-proof.md — Skill reference map](./subagency-proof.md#skill-reference-map) and [CLAUDE.md](../CLAUDE.md). Post-ORB skills: [skills/README.md](./skills/README.md). Group map: [advisory-group-matrix.md](./advisory-group-matrix.md). SpotGamma inputs: [sg-advisory-model.md](./sg-advisory-model.md).
 
@@ -23,7 +25,7 @@ The skill may only use these docs plus delegated packet context. Insufficient in
 
 Claude Advisor may read **live or contextual data supplied by the coordinator** (files, pasted metrics, enrichment summaries)—only to produce **advisory flags**, not trades.
 
-**Claude proposes; the system decides. Transport executes.**
+**Advisory proposes; the system decides. Transport executes.**
 
 Deterministic gates (spread math, RR, PMP, playbook policy, paper execution gate, MCP paper gate) remain the decision owner. Advisor output does not short-circuit that chain.
 

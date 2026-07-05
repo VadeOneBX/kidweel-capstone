@@ -39,9 +39,11 @@ Visual: [diagrams/system_operating_loop.svg](../diagrams/system_operating_loop.s
 | Layer | Decides | Does not decide |
 |-------|---------|-----------------|
 | **Deterministic repo** (`qops.*`) | Playbook policy, spread math, RR/PMP gates, payload shape, audit columns | Discretionary ticker picks, narrative overrides |
-| **Coordinator (human)** | Packet scope, paper transport opt-in, WATCH promotion | — |
-| **Claude / claude-advisor** | `ADVISORY_*` labels, memos from **supplied** context | Approve, size, submit, gate changes |
-| **Subagents (skills)** | Hygiene, safety, verification reports | Spawn subagents; transport |
+| **Operator** (human) | Packet scope, paper transport opt-in, WATCH promotion; runs canonical runtime commands | — |
+| **claude-advisor** (skill/subagent) | `ADVISORY_*` labels, memos from **supplied** context | Approve, size, submit, gate changes |
+| **Advisory agents** (repo-cleaner, safety-auditor, etc.) | Typed review reports within skill scope | Approval, transport, spawn subagents |
+| **Claude.ai desktop / Claude mobile** | Artifact review; future allowlisted command triggering (desktop only, when wired) | Approve, size, submit, bypass gates, arbitrary shell |
+| **Claude Code / Cursor Claude / Cursor mobile** | Scoped repo edits and diff review in coordinator packets | Approve, size, submit, transport |
 | **MCP / paper bridge** | Narrow integration responses when repo-gated | Approval or payload construction |
 
 Protected fields (`regime_label`, `confidence`, `gamma_ratio`) are **not** re-derived in automation. `SKIP` remains `SKIP`. `structure_bias` is not upgraded by advisory output.
@@ -97,9 +99,9 @@ Produced by `qops.advisory.claude_brief` after risk guard. Sections:
 - Pointers to context, candidates, expressions, risk audit paths
 - **Post-ORB idea distillation** (when `*_ideas.json` present): ranked policy votes (`vote:`, `ev_check:`, `regime_alignment:`); `AGENT_SIGNAL_WEAK` flags
 
-### B. Claude advisor skill (coordinator packet)
+### B. claude-advisor skill (coordinator packet)
 
-When the coordinator invokes **claude-advisor**, emit **one primary label** per review ([claude-advisor-context.md](./claude-advisor-context.md)). If the brief already lists policy votes, interpret them—do not re-run EV or change `vote:` outcomes.
+When the coordinator invokes the **claude-advisor** skill (not the morning brief artifact), emit **one primary label** per review ([claude-advisor-context.md](./claude-advisor-context.md)). If the brief already lists policy votes, interpret them—do not re-run EV or change `vote:` outcomes.
 
 | Label | Meaning |
 |-------|---------|
