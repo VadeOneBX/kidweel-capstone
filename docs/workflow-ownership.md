@@ -34,7 +34,7 @@ Goals:
 |-------|------|----------------|
 | **Operator** (human decision-maker) | Delegation, packet scope, **approval** for paper transport and implementation packets; canonical runtime commands | Advisory synthesis (delegates to claude-advisor), repo writes (delegates to Cursor) |
 | **Cursor / Claude Code / Cursor Claude** | **Repo mutation** in coordinator-scoped packets; local verification commands; applying approved doc/code changes | Approval, advisory primary synthesis, transport submit, gate/threshold changes without packet |
-| **Cursor mobile** | Scoped repo edits and diff review for Cursor agents in packets | Approval, transport, arbitrary shell, morning-loop submit |
+| **Cursor mobile** | Mobile implementation/review for Cursor agents: scoped repo edits, diff review, and **review bundles** under `docs/audit/` in packets | Approval, transport, arbitrary shell, morning-loop submit, runtime authority |
 | **claude-advisor** | **Advisory synthesis** — memos, ranked findings, `ADVISORY_*` status, bounded structure *proposals* per [claude-advisor-context.md](./claude-advisor-context.md) | Approve, size, submit, close, cancel, replace, route; MCP order tools; broker calls; schema/gate edits |
 | **Claude.ai desktop / Claude mobile** | Artifact review; desktop may later trigger allowlisted operator commands | Approve, size, submit, bypass gates, arbitrary shell (mobile: review-only unless allowlisted) |
 | **Advisory agents** (repo-cleaner, safety-auditor, etc.) | **Assigned memo artifacts** within skill reference docs | Spawn subagents; approval; transport; gate changes |
@@ -51,7 +51,7 @@ Goals:
 | Tool | Responsibility |
 |------|----------------|
 | **Cursor / Claude Code / Cursor Claude** | Edit files; run bounded terminal checks (`pytest`, `git status`, scoped `grep`); fill handoff templates; run reconciliation checklists. Edits repo—it does not approve trades. |
-| **Cursor mobile** | Mobile implementation/review for Cursor agents: scoped repo edits and diff review in packets—no transport or gate changes. |
+| **Cursor mobile** | Mobile implementation/review for Cursor agents: scoped repo edits, diff review, committed **review bundles** (`docs/audit/*_bundle.md`)—no transport or gate changes. |
 | **claude-advisor** (coordinator-delegated skill) | Read handoff-listed files; write advisory response files per [TEMPLATE_claude_to_cursor.md](./handoffs/TEMPLATE_claude_to_cursor.md). Advises—it does not mutate `src/` unless a separate implementation packet explicitly scopes that work (default: Cursor owns repo mutation). |
 | **Claude.ai desktop / Claude mobile** | Review artifacts; desktop may later use allowlisted operator commands. Mobile is visibility/review only unless routed through the same boundary. Neither approves or submits. |
 | **MCP (Alpaca paper bridge)** | Return integration results for narrowly scoped, repo-gated calls. MCP answers narrow calls—not open-ended chat commands. |
@@ -102,6 +102,15 @@ Swarm-safe routing (unchanged):
 Chat may discuss the packet; **authoritative handoff content lives in the repo files** cited by packet ID.
 
 See [handoffs/README.md](./handoffs/README.md).
+
+### Cursor mobile review bundles
+
+When a packet is executed on **Cursor mobile**, chat export is unreliable. **Commit a review bundle** under `docs/audit/` before closeout ([cursor_mobile_pack_contract.md](./cursor_mobile_pack_contract.md#mobile-review-bundle-required-for-implementationreview-packs), [audit/README.md](./audit/README.md)).
+
+- **Owner:** Cursor / Cursor mobile agent (writes bundle); operator reviews on mobile or GitHub.
+- **Shape:** Markdown with packet name, branch, commit, PR, scope, changed files, acceptance checklist, authority after merge, per-file summary, out-of-scope confirmation, mobile review path, export commands.
+- **Not a substitute for:** handoff templates, reconciliation checklists, or operator runtime commands.
+- **Example:** [taxonomy_normalization_bundle.md](./audit/taxonomy_normalization_bundle.md)
 
 ---
 
@@ -165,4 +174,5 @@ Across operator, Cursor, Cursor mobile, claude-advisor, Claude.ai surfaces, advi
 - [claude-advisor-context.md](./claude-advisor-context.md) — claude-advisor labels  
 - [CLAUDE.md](../CLAUDE.md#surface-taxonomy-authority-matters) — surface taxonomy
 - [subagent-governance.md](./subagent-governance.md) — subagent spawn and MCP policy  
-- [alpaca-paper-bridge.md](./alpaca-paper-bridge.md) — paper transport contract  
+- [cursor_mobile_pack_contract.md](./cursor_mobile_pack_contract.md) — Cursor mobile pack + review bundle contract  
+- [audit/README.md](./audit/README.md) — audit directory and bundle standard  

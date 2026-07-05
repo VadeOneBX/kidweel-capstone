@@ -7,7 +7,7 @@
 **Scope:** Docs-only (no `src/`, `scripts/`, `tests/` changes)  
 **Stats:** 11 files changed, **+102** / **−49**
 
-**Purpose:** Mobile-friendly export of packet results. Open this file on Cursor mobile or GitHub instead of copying chat output.
+**Purpose:** Mobile-friendly export of packet results. Open this file on Cursor mobile or GitHub instead of copying chat output. Conforms to [audit/README.md](./README.md) (mobile review bundle standard).
 
 **Canonical authority after merge:** [CLAUDE.md — Surface taxonomy](../CLAUDE.md#surface-taxonomy-authority-matters)
 
