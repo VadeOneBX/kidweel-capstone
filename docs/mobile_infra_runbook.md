@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This layer gives Kidweel a local-first runtime surface for operator visibility.
+This layer gives Kidweel a local-first **runtime surface** for operator visibility—not an implementation or advisory authority path.
 
 It supports:
 
@@ -10,9 +10,11 @@ It supports:
 - Redis-backed status handoff
 - cron-triggered wake messages
 - future mobile notifications
-- future Cursor packs that need a stable runtime surface
+- future **Cursor mobile** packs that need a stable runtime surface
 
-It does not approve trades, submit orders, or replace the operator.
+It does not approve trades, submit orders, or replace the **operator** decision-maker.
+
+**Surfaces:** QOPS API and cron paths here are the **runtime command boundary**. **Claude mobile** is review-only unless routed through a future allowlisted operator boundary. **Cursor mobile** scopes repo edits and diff review—it does not run morning loop submit paths or bypass gates. Taxonomy: [CLAUDE.md](../CLAUDE.md#surface-taxonomy-authority-matters).
 
 ## Local OrbStack Run
 

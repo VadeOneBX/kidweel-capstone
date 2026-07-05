@@ -35,7 +35,9 @@ uv run pytest tests -q
 uv run python scripts/orb_morning_loop.py --mode manual --base-dir .
 ```
 
-Chain in code: **ingestion wake** → **daily pipeline** (context → replay candidates → hydration expressions) → **risk guard** → **Claude brief** → optional **mobile notification** → **ORB manifest** updates. The morning loop does **not** submit paper orders.
+Chain in code: **ingestion wake** → **daily pipeline** (context → replay candidates → hydration expressions) → **risk guard** → **advisory brief** (`claude_brief` artifact) → optional **mobile notification** → **ORB manifest** updates. The morning loop does **not** submit paper orders.
+
+**Surfaces:** Loop commands run on the operator runtime boundary. **Claude.ai desktop**, **Claude mobile**, and **Cursor mobile** may review loop artifacts or apply scoped repo edits—they do not trigger this chain unless the operator runs canonical commands on the host. **claude-advisor** (coordinator packet) emits separate `ADVISORY_*` labels; it does not replace the brief artifact.
 
 Related operator docs: [operator_commands.md](./operator_commands.md), [evidence_artifacts_guide.md](./evidence_artifacts_guide.md), [mobile_infra_runbook.md](./mobile_infra_runbook.md).
 
@@ -297,4 +299,5 @@ uv run pytest \
 ## Boundary reminder
 
 - Morning loop tests and commands remain **paper-only** and **non-submitting** unless you are explicitly in a scoped paper-transport packet.
-- Mobile and Tailscale paths are **visibility**; they do not approve trades. See [tailscale_operator_access.md](./tailscale_operator_access.md) and [cursor_mobile_pack_contract.md](./cursor_mobile_pack_contract.md).
+- **Runtime vs implementation:** canonical commands (`uv run`, `orb_morning_loop.py`, `operator_status.py`) run on the host/SSH boundary. **Cursor mobile**, **Claude Code / Cursor Claude**, and **Claude.ai desktop** are implementation or review surfaces—they do not approve trades or replace operator shell commands.
+- **Mobile visibility:** Tailscale, ntfy, and QOPS API routes are **read/dry-run only**. **Claude mobile** and **Cursor mobile** do not gain execution authority. See [tailscale_operator_access.md](./tailscale_operator_access.md) and [cursor_mobile_pack_contract.md](./cursor_mobile_pack_contract.md).

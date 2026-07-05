@@ -2,11 +2,27 @@
 
 **Doctrine**
 
-- **Claude proposes.** The system decides. Transport executes.
+- **Advisory proposes** (claude-advisor, advisory agents). **The system decides.** **Transport executes.**
 - **More agents do not mean more authority.**
 - **Subagents help the system see; they do not help the system act.**
 
 Agent policy: [AGENTS.md](AGENTS.md). Manifests: [.claude/agents/](.claude/agents/). Skills: [.claude/skills/](.claude/skills/).
+
+---
+
+## Surface taxonomy (authority matters)
+
+| Surface | Role | Does not |
+|---------|------|----------|
+| **Operator** | Human decision-maker; packet scope, approval, transport opt-in | Delegate authority to mobile or advisory surfaces |
+| **Claude.ai desktop** | Operator-facing review; future allowlisted command triggering | Approve, size, submit, bypass gates, arbitrary shell |
+| **Claude mobile** | Visibility/review only unless routed through the same allowlisted boundary | Approve, size, submit, bypass gates, arbitrary shell |
+| **claude-advisor** | Repo advisory skill/subagent; `ADVISORY_*` labels and memos | Approve, size, submit, transport, gate changes |
+| **Claude Code / Cursor Claude** | IDE/coding assistant; scoped repo edits in coordinator packets | Approve, size, submit, transport |
+| **Cursor mobile** | Mobile implementation/review for Cursor agents; scoped repo edits and diff review | Approve, size, submit, bypass gates, arbitrary shell |
+| **Advisory agents** | Typed review tools (repo-cleaner, safety-auditor, etc.) | Approval, transport, spawn subagents |
+
+**Runtime command boundary:** canonical operator commands (`uv run`, `scripts/orb_morning_loop.py`, `operator_status.py`, etc.) run on the host or via SSH/Tailscale—they are not IDE or mobile chat actions. Implementation surfaces (Cursor, Claude Code, Cursor mobile) edit docs/code; they do not replace the operator runtime path.
 
 ---
 

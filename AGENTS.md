@@ -2,15 +2,17 @@
 
 Kidweel agents and skills are **bounded delegates** under the main coordinator. They do not own approval or transport.
 
-**Doctrine:** Claude proposes; the system decides; transport executes. More agents do not mean more authority. Subagents help the system see; they do not help the system act.
+**Doctrine:** Advisory proposes (claude-advisor, advisory agents); the system decides; transport executes. More agents do not mean more authority. Subagents help the system see; they do not help the system act.
 
 Project rules: [CLAUDE.md](CLAUDE.md). Governance: [docs/subagent-governance.md](docs/subagent-governance.md).
+
+**Surface taxonomy:** See [CLAUDE.md — Surface taxonomy](CLAUDE.md#surface-taxonomy-authority-matters). In brief: **operator** decides; **claude-advisor** and **advisory agents** emit labels/memos only; **Claude.ai desktop** / **Claude mobile** are review surfaces (mobile has no execution unless allowlisted); **Claude Code / Cursor Claude** and **Cursor mobile** scope repo edits only—none approve, size, submit, or bypass gates.
 
 ---
 
 ## Policy
 
-1. **Coordinator owns delegation.** Only the human-directed main session assigns agents, scope, and packet context.
+1. **Operator (coordinator) owns delegation.** Only the human-directed main session assigns agents, scope, and packet context.
 2. **Agents do not spawn agents.** No nested Agent/Task trees.
 3. **Agents do not gain execution authority.** No approve, size, submit, close, cancel, replace, or route orders from agent manifests or skills.
 4. **Advisory may read supplied context.** Files, paste, and packet attachments named by the coordinator.

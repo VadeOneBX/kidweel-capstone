@@ -4,10 +4,10 @@
 
 Kidweel separates **control** from **agility**.
 
-- **Guardrails** and **human approval** define what the system is allowed to do.
-- **Agents-as-tools** define how quickly specialized work is evaluated without making every specialist an execution actor.
+- **Guardrails** and **operator approval** define what the system is allowed to do.
+- **Agents-as-tools** (typed advisory agents) define how quickly specialized work is evaluated without making every specialist an execution actor.
 
-Narrow agents, typed outputs, deterministic gates, human command at action boundaries.
+Narrow agents, typed outputs, deterministic gates, human command at action boundaries. Advisory agents and **claude-advisor** emit memos only—they do not approve, size, submit, or bypass gates. **Cursor mobile** and **Claude mobile** are review/implementation surfaces, not the runtime command boundary.
 
 ## Stack
 

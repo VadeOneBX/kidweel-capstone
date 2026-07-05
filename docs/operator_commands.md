@@ -4,6 +4,8 @@ Remote scheduling, Tailscale/SSH, push notifications, Docker cron templates, and
 
 **Tests by morning-loop phase (uv + Docker):** [operator_test_commands_morning_loop.md](./operator_test_commands_morning_loop.md).
 
+**Surfaces:** Commands below run on the **operator runtime boundary** (host shell or SSH via Tailscale)—not in Claude.ai, Claude mobile, or Cursor mobile chat. Those surfaces review artifacts or apply scoped repo edits; they do not approve, submit, or bypass gates. Taxonomy: [CLAUDE.md](../CLAUDE.md#surface-taxonomy-authority-matters).
+
 ## Host setup (uv + optional Docker)
 
 One-time from repo root:
@@ -85,7 +87,9 @@ uv run python scripts/orb_morning_loop.py --mode manual --base-dir . --no-notify
 uv run python scripts/operator_status.py --base-dir .
 ```
 
-## View Claude advisory
+## View advisory brief (deterministic artifact)
+
+Morning brief from `qops.advisory.claude_brief`—not claude-advisor skill output. Review on host or via Tailscale; Claude.ai / Claude mobile are visibility surfaces only.
 
 ```bash
 cat data/advisory/latest_claude_brief.md
