@@ -2,9 +2,14 @@
 
 ## Authority
 
-**Claude proposes; the system decides.** Transport executes separately and only for repo-approved payloads.
+**Advisory proposes; the system decides; operator/HITL controls transport.**
 
-Claude may not approve, size, execute, route, or override gates.
+- **Advisory** means claude-advisor and advisory agents (interpretation, memos, bounded spread alternatives).
+- **Claude.ai desktop** is an operator-facing review surface and future allowlisted command-trigger surface.
+- **Claude mobile** is visibility/review only.
+- **Claude Code / Cursor Claude** and **Cursor mobile** are implementation/review surfaces—not runtime authority.
+
+Transport executes separately and only for repo-approved payloads after operator/HITL opt-in. No advisory or IDE/mobile surface may approve, size, submit, transport, bypass gates, or run arbitrary shell.
 
 ## Role
 

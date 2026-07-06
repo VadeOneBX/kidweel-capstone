@@ -2,7 +2,7 @@
 
 **Paper-only decision infrastructure.** Kidweel GEX Automation is a paper-only options decision system that converts source-grounded market context into risk-defined trade candidates through deterministic guardrails, spread economics, and audit artifacts. Live trading is not supported. Transport defaults to **dry-run**; real Alpaca paper submit requires explicit operator opt-in (`--submit-paper`).
 
-Claude proposes. The system decides. Transport executes.
+Advisory proposes; the system decides; operator/HITL controls transport.
 
 **Trinity (portable narrative):** (1) **Deterministic decision system** — context, spread construction, EV/RR/PMP gates, and audit artifacts; (2) **Paper-only execution guardrails** — dry-run default, explicit opt-in submit, no live endpoint; (3) **Portable evidence narrative** — replay candidates, gate outcomes, and transport status where applicable, readable on GitHub, in interviews, and in portfolio copy. Built to **reject weak decisions, not force trades**; **`SKIP` / do nothing is a first-class output**.
 
