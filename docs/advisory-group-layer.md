@@ -2,7 +2,9 @@
 
 Interpretive advisory above deterministic gates—**no execution authority**. Spread math, approval, and transport stay repo-owned.
 
-**Claude proposes; the system decides; transport executes.**
+**Advisory proposes; the system decides; operator/HITL controls transport.**
+
+**Advisory** means claude-advisor and advisory agents. Claude.ai desktop is an operator-facing review surface and future allowlisted command-trigger surface; Claude mobile is visibility/review only. Claude Code / Cursor Claude and Cursor mobile are implementation/review surfaces—not runtime authority. None of these surfaces approve, size, submit, transport, bypass gates, or run arbitrary shell.
 
 ## Layers
 

@@ -2,7 +2,9 @@
 
 A **deterministic, paper-only** options decision system with **required** ML and subagent advisory layers plus a **bounded** probabilistic context layer (Claude overlay and research comparisons). It removes structurally invalid or context-degraded setups before any transport handoff—not by predicting markets, but by enforcing playbook, RR, and PMP constraints.
 
-**Claude proposes** (interpretation, memos, bounded spread alternatives within canonical structures, research filters). **The system decides** (gates, approval, payloads). **Transport executes** (mock offline today; future paper MCP only).
+**Advisory proposes** (claude-advisor and advisory agents: interpretation, memos, bounded spread alternatives within canonical structures, research filters). **The system decides** (gates, approval, payloads). **Operator/HITL controls transport** (mock offline today; future paper MCP only after explicit opt-in).
+
+Claude.ai desktop is an operator-facing review surface and future allowlisted command-trigger surface; Claude mobile is visibility/review only. Claude Code / Cursor Claude and Cursor mobile are implementation/review surfaces—not runtime authority. No advisory or IDE/mobile surface may approve, size, submit, transport, bypass gates, or run arbitrary shell.
 
 **Constraint Survivability:** AI can generate actions; constraint systems determine which actions are allowed. Automation creates leverage; constraints determine whether that leverage survives scale.
 
