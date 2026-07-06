@@ -6,6 +6,19 @@ Advisory proposes; the system decides; operator/HITL controls transport.
 
 **Trinity (portable narrative):** (1) **Deterministic decision system** — context, spread construction, EV/RR/PMP gates, and audit artifacts; (2) **Paper-only execution guardrails** — dry-run default, explicit opt-in submit, no live endpoint; (3) **Portable evidence narrative** — replay candidates, gate outcomes, and transport status where applicable, readable on GitHub, in interviews, and in portfolio copy. Built to **reject weak decisions, not force trades**; **`SKIP` / do nothing is a first-class output**.
 
+## Public posture (30 seconds)
+
+- **Live paper-trading validation** — Alpaca paper transport only; dry-run default; explicit operator opt-in (`--submit-paper`) to submit.
+- **No live capital authority** — live endpoints forbidden; no production trading path.
+- **Defined-risk** — multileg spread candidates through deterministic spread economics and guardrails.
+- **Deterministic gates** — EV/RR/PMP and policy gates decide continue, reject, or SKIP.
+- **Evidence trails** — manifests, risk audits, transport records, and rejection reasons are first-class outputs.
+- **Operator review** — advisory layers flag; gates approve; submit requires explicit flags and credentials.
+
+**Not** a signal service, trading advice, AI trading bot, or autonomous trading system.
+
+**Public splash:** https://vadeonebx.github.io/kidweel-site/
+
 ---
 
 ## 1. Project Thesis
