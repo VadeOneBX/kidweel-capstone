@@ -1,21 +1,16 @@
 # Kidweel GEX Automation
 
-**Paper-only decision infrastructure.** Kidweel GEX Automation is a paper-only options decision system that converts source-grounded market context into risk-defined trade candidates through deterministic guardrails, spread economics, and audit artifacts. Live trading is not supported. Transport defaults to **dry-run**; real Alpaca paper submit requires explicit operator opt-in (`--submit-paper`).
+Kidweel GEX Automation is a paper-only options decision system that converts source-grounded market context into risk-defined trade candidates through deterministic guardrails, spread economics, and audit artifacts. Live trading is not supported. Transport defaults to **dry-run**; real Alpaca paper submit requires explicit operator opt-in (`--submit-paper`).
 
-Advisory proposes; the system decides; operator/HITL controls transport.
-
-**Trinity (portable narrative):** (1) **Deterministic decision system** — context, spread construction, EV/RR/PMP gates, and audit artifacts; (2) **Paper-only execution guardrails** — dry-run default, explicit opt-in submit, no live endpoint; (3) **Portable evidence narrative** — replay candidates, gate outcomes, and transport status where applicable, readable on GitHub, in interviews, and in portfolio copy. Built to **reject weak decisions, not force trades**; **`SKIP` / do nothing is a first-class output**.
+While it is true that automation can create substantial leverage, **deterministic guardrails** determine whether that leverage survives scale. This system aims to protect gains through **source-grounded context → spread economics → risk-defined execution policy → audit trail**.
 
 ## Public posture (30 seconds)
 
 - **Live paper-trading validation** — Alpaca paper transport only; dry-run default; explicit operator opt-in (`--submit-paper`) to submit.
-- **No live capital authority** — live endpoints forbidden; no production trading path.
 - **Defined-risk** — multileg spread candidates through deterministic spread economics and guardrails.
 - **Deterministic gates** — EV/RR/PMP and policy gates decide continue, reject, or SKIP.
 - **Evidence trails** — manifests, risk audits, transport records, and rejection reasons are first-class outputs.
 - **Operator review** — advisory layers flag; gates approve; submit requires explicit flags and credentials.
-
-**Not** a signal service, trading advice, AI trading bot, or autonomous trading system.
 
 **Public splash:** https://vadeonebx.github.io/kidweel-site/
 
@@ -23,9 +18,7 @@ Advisory proposes; the system decides; operator/HITL controls transport.
 
 ## 1. Project Thesis
 
-Options workflows fail in practice when checks drift—skipped gates, loose quotes, or advisory layers that start to sound like permission. Kidweel is an operator-built **paper-only decision trail**: SpotGamma and related inputs become normalized context, deterministic gates decide what may continue, and only approved multileg payloads may reach Alpaca **paper** transport when you explicitly opt in.
-
-Automation creates leverage. **Deterministic guardrails** determine whether that leverage survives scale. This is not market prediction or a discretionary signal engine; it is **source-grounded context → spread economics → risk-defined execution policy → audit trail**.
+Options workflows fail in practice when checks drift—skipped gates, loose quotes, or advisory layers that start to sound like permission. Kidweel is an operator-built **decision trail**: 3-rd party data and related inputs become normalized context, deterministic gates decide what may continue, and only approved multileg payloads may reach Alpaca transport when you explicitly opt in.
 
 Supporting layers (Claude briefs, subagent skills, ML-style advisory flags) help **candidate review** and interpretation. They do not approve trades, mutate thresholds, or submit orders.
 
@@ -39,8 +32,6 @@ Supporting layers (Claude briefs, subagent skills, ML-style advisory flags) help
 | **SPY backdrop context** | Regime label for morning replay hydration (when present) | Joined in risk guard; absent backdrop is advisory, not a silent upgrade |
 | **Alpaca market data / greeks staging** | Option chain quotes, greeks staging, hydration expressions | **Infrastructure / reference**—Alpaca is used as a broker/data integration and options workflow reference point. It is not treated as a trading brain or discretionary signal source |
 | **Operator-staged files** | `data/spotgamma/inbox`, dated raw session folders | Intake contract enforced at wake; rejects are logged on the manifest |
-
-SpotGamma-derived context is used to describe dealer positioning, volatility regime, and directional constraints before any spread economics are evaluated.
 
 ---
 
@@ -60,7 +51,7 @@ SpotGamma ingestion
   → session runner (ORB morning loop: wake → pipeline → guard → brief → notify)
 ```
 
-**Morning loop (primary operator path):** `scripts/orb_morning_loop.py` runs ingestion wake, `qops.pipeline.daily_pipeline` (context + candidates + Alpaca hydration expressions), `qops.risk.guard_runner`, then `qops.advisory.claude_brief` and optional notification. It does **not** submit paper orders.
+**Morning loop (primary operator path):** `scripts/orb_morning_loop.py` runs ingestion wake, `qops.pipeline.daily_pipeline` (context + candidates + Alpaca hydration expressions), `qops.risk.guard_runner`, then `qops.advisory.claude_brief` and optional notification. 
 
 **Spread generation path (separate CLI):** `examples/generate_spread_candidates.py` reads staged Alpaca greeks CSV and emits spread candidates through `spread_math`—no transport.
 
@@ -78,7 +69,7 @@ See also [docs/artifact_inspection_checklist.md](./docs/artifact_inspection_chec
 
 ## 4. Execution Policy
 
-The system is designed for **paper execution and auditability**. Live trading is not supported.
+The system is designed for **paper execution and auditability**. Live trading is not recommended.
 
 | Policy | Repo behavior |
 |--------|----------------|
@@ -109,7 +100,7 @@ Paper path docs: [alpaca paper bridge](./docs/alpaca-paper-bridge.md), [paper ap
 
 There is no checked-in `alpaca_iterative_backtester.py` in this repository. Treat any external iterative backtest helper that fabricates Sharpe or PnL with random placeholders as **legacy/scaffold**, not final evidence infrastructure.
 
-Legacy or scaffolded backtesting utilities are retained only where useful for inspection or development. Evidence claims should come from replay artifacts, risk audits, paper transport records, and deterministic candidate outputs—not randomized placeholder metrics.
+Legacy or scaffolded backtesting utilities are retained only where useful for inspection or development. 
 
 Research-only Claude overlay comparisons: [docs/claude-backtest-wiring.md](./docs/claude-backtest-wiring.md), [docs/findings-c13-claude-context.md](./docs/findings-c13-claude-context.md).
 
@@ -117,7 +108,7 @@ Research-only Claude overlay comparisons: [docs/claude-backtest-wiring.md](./doc
 
 ---
 
-## 6. Paper-Only Guardrails
+## 6. Paper-Trade Guardrails
 
 - **Paper-only execution path** with fail-closed gates (`paper_only=True` in risk guard).
 - **Manifest flags:** `live_mode_enabled` and `broker_mutation_occurred` should remain false for morning runs unless an explicit, scoped paper packet says otherwise.
@@ -144,15 +135,8 @@ Operator commands: [docs/operator_commands.md](./docs/operator_commands.md).
 
 ---
 
-## 8. What This Is Not
-
-- Not **live execution** or production trading on live Alpaca endpoints.
-- Not an **autonomous AI trading** system, **AI trading brain**, **self-directed trading agent**, or **fully automated options trader**.
-- Not a **predictive alpha engine** or **guaranteed edge** product.
-- Not unrestricted order submission—no blind auth retry, no assistant with cancel/replace authority.
-- Not proof that mock backtest memos or placeholder metrics represent real PnL.
-
-It **is** a **decision system** for **risk-defined options workflows**: paper-only path, **deterministic gates**, **evidence trail**, and explicit candidate review before any paper transport.
+## 8. Derivatives Disclaimer
+**Not** a signal service, trading advice, AI trading bot, or autonomous trading system. Options trading carries a very high level of risk and is not suitable for all. Past performance and strategic posture within this repo make no claim or guarantee of future results.
 
 ---
 
