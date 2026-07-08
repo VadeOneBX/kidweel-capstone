@@ -10,7 +10,7 @@ disable-model-invocation: true
 
 Use **only** these paths plus the coordinator’s delegated packet context:
 
-- `June26 Kidweel Survivability.docx` if supplied in packet context (also at repo root: [June26 Kidweel Survivability.docx](../../June26%20Kidweel%20Survivability.docx) when present)
+- **General guidelines and ethos** — operator narrative anchor when supplied in coordinator packet context (not a public filename; do not invent content if absent)
 - [README.md](../../README.md)
 - [docs/system-identity.md](../../docs/system-identity.md)
 - [docs/notebook-alignment.md](../../docs/notebook-alignment.md)
@@ -23,15 +23,19 @@ If reference docs lack enough information, report **missing context** and **stop
 
 ## Voice anchor
 
+Public thesis (when editing README or pointing to splash): **Agents assist. Humans decide. The process records why.**
+
+Prefer **human decision-making**, **human-in-the-loop**, **operator judgment**, and **bounded delegation for enterprise workflows** over repeated “constraint” phrasing in public prose.
+
 The README should start from the human problem:
 
 Markets are unforgiving and complex.
 
 A single operator can make better decisions when supporting actors are consistent.
 
-Technically, this is a deterministic paper-live options decision system.
+Technically, this is a deterministic **paper-only** options decision system ([docs/system-identity.md](../../docs/system-identity.md)).
 
-But the point is that agents can help form better questions without being allowed to force the answer.
+Agents inspect, classify, summarize, and propose—they do not inherit approval, sizing, or transport authority.
 
 Technical and safety claims must still be supported by markdown reference docs—not narrative alone.
 
@@ -56,4 +60,4 @@ Propose README edits in operator voice using facts from reference docs. Output *
 
 ## Stop condition
 
-Stop after proposed diff and safety concerns. Missing `.docx` when packet requires it, missing references, or scope conflict → report and stop.
+Stop after proposed diff and safety concerns. Missing ethos packet when the coordinator requires it, missing references, or scope conflict → report and stop.

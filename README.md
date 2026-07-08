@@ -12,7 +12,21 @@ While it is true that automation can create substantial leverage, **deterministi
 - **Evidence trails** — manifests, risk audits, transport records, and rejection reasons are first-class outputs.
 - **Operator review** — advisory layers flag; gates approve; submit requires explicit flags and credentials.
 
-**Public splash:** https://vadeonebx.github.io/kidweel-site/
+**Public splash:** [kidweel-site/index.html](./kidweel-site/index.html) (GitHub Pages: publish the `kidweel-site/` folder)
+
+## Subagency Proof
+
+Kidweel demonstrates human-in-the-loop delegation for enterprise workflows.
+
+Agents can inspect, classify, summarize, and propose.
+
+Decision authority stays human.
+
+The process records the handoff.
+
+Agents assist. Humans decide. The process records why.
+
+See: [`docs/subagency-proof.md`](docs/subagency-proof.md) · [Subagency map](./diagrams/kidweel_subagency_map.png) · [Splash](./kidweel-site/index.html)
 
 ---
 
@@ -85,26 +99,11 @@ Paper path docs: [alpaca paper bridge](./docs/alpaca-paper-bridge.md), [paper ap
 
 ---
 
-## 5. Evidence and Backtesting
+## 5. Evidence and replay (operator)
 
-**What counts as evidence:** replay and morning-run **CSVs**, **risk audit** rows (including rejects), **orb manifests**, **hydration expression** files, **paper transport** records, and deterministic gate reasons. A successful run does not require paper submission. A useful run must preserve source context, candidate construction, guard outcome, and rejection or approval reason.
+Runs should preserve context, guard outcomes, and rejection or approval reasons in manifests and audit CSVs. Rejected candidates are first-class evidence.
 
-**Rejected candidates are evidence.** They show guard behavior, missing-field handling, spread economics failure, and policy enforcement.
-
-**Backtesting / replay in repo:**
-
-- **Replay aggregation:** `src/qops/backtest/runner.py` (`run_iterative_backtest`) aggregates **ReplayContext** rows (PnL and exits supplied by context—not a live broker loop).
-- **SpotGamma → replay candidates:** `spotgamma_replay_builder`, daily pipeline exports.
-- **Alpaca replay planning:** `alpaca_replay_inputs.py` plans historical data needs—no orders.
-- **Mock research memos:** `docs/backtests/`, `docs/audit/`, `docs/reconciliation/mock_backtest_reconciliation_C1.md` document **synthetic** PnL and strikes—useful for inspection, not proof of edge.
-
-There is no checked-in `alpaca_iterative_backtester.py` in this repository. Treat any external iterative backtest helper that fabricates Sharpe or PnL with random placeholders as **legacy/scaffold**, not final evidence infrastructure.
-
-Legacy or scaffolded backtesting utilities are retained only where useful for inspection or development. 
-
-Research-only Claude overlay comparisons: [docs/claude-backtest-wiring.md](./docs/claude-backtest-wiring.md), [docs/findings-c13-claude-context.md](./docs/findings-c13-claude-context.md).
-
-**Evidence status (canonical vs mock):** [docs/backtest_evidence_status.md](./docs/backtest_evidence_status.md).
+Operator depth: [evidence artifacts guide](./docs/evidence_artifacts_guide.md), [backtest evidence status](./docs/backtest_evidence_status.md), [claude-backtest-wiring](./docs/claude-backtest-wiring.md).
 
 ---
 
@@ -162,6 +161,7 @@ Before sharing artifacts externally, run the privacy grep in [docs/claude_code_a
 | Public readiness | [docs/public_readiness.md](./docs/public_readiness.md) |
 | Repo classification (CLEAN-C1) | [docs/repo_classification_C1.md](./docs/repo_classification_C1.md) |
 | Morning artifact checklist | [docs/artifact_inspection_checklist.md](./docs/artifact_inspection_checklist.md) |
+| Subagency proof | [docs/subagency-proof.md](./docs/subagency-proof.md) |
 | Subagent governance | [docs/subagent-governance.md](./docs/subagent-governance.md) |
 | Claude advisor (proposal only) | [docs/claude-advisor-context.md](./docs/claude-advisor-context.md) |
 | Alpaca MCP integration | [integrations/alpaca_mcp/README.md](./integrations/alpaca_mcp/README.md) |

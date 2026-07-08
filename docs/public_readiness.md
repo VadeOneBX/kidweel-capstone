@@ -28,6 +28,8 @@ A final legal license (e.g. custom source-available terms) may replace or amend 
 
 ## Suggested external narrative
 
-Use the README **Trinity** framing: deterministic decision system, paper-only execution guardrails, portable evidence narrative. Avoid “autonomous alpha,” “AI trading brain,” or “production live execution.”
+Lead with human decision-making inside bounded delegation: **Agents assist. Humans decide. The process records why.**
+
+Use the README **Subagency Proof** bridge and [kidweel-site splash](../kidweel-site/index.html). Emphasize human-in-the-loop review, operator judgment, and audit trails—not autonomous routing, inherited authority, or live-money execution.
 
 Related: [README.md](../README.md), [system-identity.md](./system-identity.md), [c13-governance.md](./c13-governance.md).
