@@ -24,6 +24,77 @@ Subagents are **not** a second decision engine, approval path, or transport laye
 
 ---
 
+## Overarching skill use discipline (OVERARCHING SKILL USE DISCIPLINE-C1)
+
+This is a repo operating rule for Cursor, Claude Code, and Claude.ai handoffs.
+
+### Core rule and authority order
+
+Before acting, check whether a relevant skill applies. If one applies, invoke and follow it within packet scope.
+
+Authority order:
+
+1. User and repo instructions (POLICY, STRUCTURE, packet scope, `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/`)  
+2. Applicable skill workflow requirements  
+3. Default model behavior  
+
+If higher and lower layers conflict, higher layers win.
+
+### Skill priority tiers
+
+When multiple skills apply, use this order unless packet scope says otherwise:
+
+1. **Process skills** - decide approach and sequencing
+2. **Task skills** - execute the scoped deliverable
+3. **Review skills** - independent verification and critique
+
+Skill labels are workflow requirements even when a matching local file is missing.
+
+### Shortcut red flags and STOP/check behavior
+
+Red flags: "just do this quickly", "I'll skip the skill this time", "I need to explore first", "I already remember that skill", "this task is too small for workflow."
+
+On any red flag:
+
+1. STOP
+2. Check skill applicability first
+3. If applicable, invoke skill and continue
+4. If no skill applies, proceed with explicit note that no skill matched
+
+### Required behavior by task type
+
+- **Public copy:** use `public-language-auditor` workflow label before publishing-facing wording.
+- **Visual / LinkedIn artifacts:** use `canvas` workflow first for the deliverable surface.
+- **README / splash / proof alignment:** use `readme-editor` workflow and enforce cross-doc consistency.
+- **Code changes:** use `test-driven-development` workflow before implementation and keep verification evidence.
+- **Implementation plans:** use `subagent-driven-development` workflow for independent streams plus `requesting-code-review` workflow before merge readiness.
+- **Authority-sensitive changes:** run `safety-auditor` workflow and restate non-negotiables before proceeding.
+
+These workflows do not grant execution, approval, sizing, or transport authority.
+
+### Acceptance criteria (packet)
+
+- Core rule and authority order are stated explicitly.
+- Skill priority tiers are defined as process, task, review.
+- Shortcut red flags and STOP/check behavior are present.
+- Required behavior by task type is enumerated.
+- Wording remains consistent with existing governance boundaries.
+- Missing skill files are treated as required workflow labels, not new authority.
+- Required response format fields are defined.
+
+### Required response format fields
+
+For packet completion reports, include:
+
+1. Skills used
+2. Task type
+3. Files/surfaces touched
+4. Review status
+5. Human approval needed
+6. Short summary of exact edits made
+
+---
+
 ## Non-negotiables
 
 1. Only the main coordinator delegates.

@@ -13,13 +13,14 @@ Project rules: [CLAUDE.md](CLAUDE.md). Governance: [docs/subagent-governance.md]
 ## Policy
 
 1. **Operator (coordinator) owns delegation.** Only the human-directed main session assigns agents, scope, and packet context.
-2. **Agents do not spawn agents.** No nested Agent/Task trees.
-3. **Agents do not gain execution authority.** No approve, size, submit, close, cancel, replace, or route orders from agent manifests or skills.
-4. **Advisory may read supplied context.** Files, paste, and packet attachments named by the coordinator.
-5. **Advisory may use read-only market / option info only when explicitly scoped** in the packet—not as default broker or MCP access.
-6. **Paper transport remains repo-gated and explicit.** Gates, payloads, and MCP live on the deterministic path; not on advisory agents.
-7. **Agents must use reference docs** listed in their bound skill’s Reference docs section.
-8. **Missing references are blockers.** Report and stop; do not improvise architecture or data.
+2. **Skill check precedes action.** Apply [OVERARCHING SKILL USE DISCIPLINE-C1](docs/subagent-governance.md#overarching-skill-use-discipline-overarching-skill-use-discipline-c1): check for relevant skills before acting.
+3. **Agents do not spawn agents.** No nested Agent/Task trees.
+4. **Agents do not gain execution authority.** No approve, size, submit, close, cancel, replace, or route orders from agent manifests or skills.
+5. **Advisory may read supplied context.** Files, paste, and packet attachments named by the coordinator.
+6. **Advisory may use read-only market / option info only when explicitly scoped** in the packet—not as default broker or MCP access.
+7. **Paper transport remains repo-gated and explicit.** Gates, payloads, and MCP live on the deterministic path; not on advisory agents.
+8. **Agents must use reference docs** listed in their bound skill’s Reference docs section.
+9. **Missing references are blockers.** Report and stop; do not improvise architecture or data.
 
 ---
 

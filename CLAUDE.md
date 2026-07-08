@@ -114,6 +114,7 @@ Alpaca CLI (only in user-scoped paper packets): use `--quiet`; treat exit code *
 - Treat schemas and playbooks as immutable contracts.
 - Docs/agent config packets do not change execution code unless the packet explicitly allows it.
 - Only the **coordinator** delegates agents/skills; agents do not spawn agents.
+- Apply [OVERARCHING SKILL USE DISCIPLINE-C1](docs/subagent-governance.md#overarching-skill-use-discipline-overarching-skill-use-discipline-c1): before acting, check skill applicability first.
 
 ---
 
