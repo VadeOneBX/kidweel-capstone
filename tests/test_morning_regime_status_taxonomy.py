@@ -155,10 +155,10 @@ def test_watch_without_pass_is_withheld_quality(tmp_path: Path) -> None:
         tmp_path,
         run_id,
         context_rows=[{"symbol": "SPY", "trade_date": "2026-07-08"}],
-        candidate_rows=[{"symbol": "QQQ"}],
+        candidate_rows=[{"symbol": "MSFT"}],
         risk_rows=[
             {
-                "symbol": "QQQ",
+                "symbol": "MSFT",
                 "classification": CandidateLoopStatus.WATCH_EXPRESSION_AVAILABLE.value,
                 "reject_reason": "operator_watch_review_required",
                 "candidate_loop_status": CandidateLoopStatus.WATCH_EXPRESSION_AVAILABLE.value,
@@ -168,8 +168,8 @@ def test_watch_without_pass_is_withheld_quality(tmp_path: Path) -> None:
         expression_rows=[
             {
                 "run_id": run_id,
-                "symbol": "QQQ",
-                "expression_id": "qqq-watch",
+                "symbol": "MSFT",
+                "expression_id": "msft-watch",
                 "expression_status": SpreadExpressionStatus.WATCH.value,
             }
         ],
@@ -190,10 +190,10 @@ def test_pass_expression_sets_allowed_without_auto_submit(tmp_path: Path) -> Non
         tmp_path,
         run_id,
         context_rows=[{"symbol": "SPY", "trade_date": "2026-07-08"}],
-        candidate_rows=[{"symbol": "IBIT"}],
+        candidate_rows=[{"symbol": "GOOGL"}],
         risk_rows=[
             {
-                "symbol": "IBIT",
+                "symbol": "GOOGL",
                 "classification": "APPROVED_PAPER",
                 "paper_approval_status": "APPROVED_FOR_PAPER_REVIEW",
                 "reject_reason": "",
@@ -204,8 +204,8 @@ def test_pass_expression_sets_allowed_without_auto_submit(tmp_path: Path) -> Non
         expression_rows=[
             {
                 "run_id": run_id,
-                "symbol": "IBIT",
-                "expression_id": "ibit-primary",
+                "symbol": "GOOGL",
+                "expression_id": "googl-primary",
                 "expression_status": SpreadExpressionStatus.PRIMARY.value,
             }
         ],
@@ -216,5 +216,5 @@ def test_pass_expression_sets_allowed_without_auto_submit(tmp_path: Path) -> Non
 
     assert status["quality_gate"] == "PASS"
     assert status["paper_action"] == "ALLOWED"
-    assert status["selected_expression"] == "ibit-primary"
+    assert status["selected_expression"] == "googl-primary"
     assert result["paper_approval_allowed"] is True
