@@ -29,6 +29,8 @@ from qops.advisory.expression_frontier import (
 )
 from qops.advisory.spread_skeptic import SpreadSkepticNote, build_spread_skeptic_notes
 from qops.runtime.orb_manifest import OrbRunManifest
+from qops.risk.guard_runner import summarize_risk_audit
+from qops.schemas.candidate_loop import CandidateLoopStatus, SpreadExpressionStatus
 
 
 def _json_default(value: object) -> object:
@@ -57,6 +59,143 @@ def _macro_posture_label(gate: MacroPaperGate) -> str:
     return gate.paper_gate_macro_status
 
 
+def _morning_macro_context(gate: MacroPaperGate) -> str:
+    if gate.macro_context_state == "AM_NOTE_CONTEXT_READY":
+        return "READY"
+    if gate.macro_context_state == "MANUAL_CONTEXT_OVERRIDE":
+        return "READY_LOW_CONFIDENCE"
+    if gate.am_note_status == "AVAILABLE_NOT_PARSED":
+        return "UNPARSED_NON_BLOCKING"
+    if gate.am_note_status == "NOT_AVAILABLE":
+        return "MISSING_NON_BLOCKING"
+    return "READY_LOW_CONFIDENCE"
+
+
+def _has_reason_token(risk_df: pd.DataFrame, tokens: tuple[str, ...]) -> bool:
+    if risk_df.empty or "reject_reason" not in risk_df.columns:
+        return False
+    values = risk_df["reject_reason"].fillna("").astype(str).str.lower()
+    return any(values.str.contains(token, regex=False).any() for token in tokens)
+
+
+def _build_morning_regime_status(
+    manifest: OrbRunManifest,
+    gate: MacroPaperGate,
+    risk_df: pd.DataFrame,
+    expressions_df: pd.DataFrame,
+) -> dict[str, object]:
+    summary = summarize_risk_audit(manifest.risk_audit_artifact or "")
+    candidate_count = int(summary.get("total_candidates", 0) or 0)
+    no_viable = int(summary.get("no_viable_expression", 0) or 0)
+    watch_count = int(summary.get("watch_expression_available", 0) or 0)
+    primary_count = int(summary.get("primary_expression_selected", 0) or 0)
+    approved_count = int(summary.get("approved_paper_only", 0) or 0)
+    parked_count = int(summary.get("parked", 0) or 0)
+    rejected_count = int(summary.get("rejected", 0) or 0)
+    data_gap_count = int(summary.get("parked_data_gap", 0) or 0)
+    hydration_pending = int(summary.get("hydration_pending", 0) or 0)
+    hydrated_attempts = int(summary.get("hydration_expressions_attempted", 0) or 0)
+
+    credential_parked = _has_reason_token(
+        risk_df,
+        ("credential", "auth", "alpaca_missing", "missing_key_secret"),
+    )
+    geometry_rejects = _has_reason_token(
+        risk_df,
+        ("spread_economics", "reward_risk", "no_viable_expression", "expression_search_exhausted"),
+    )
+
+    if credential_parked:
+        hydration = "PARKED_CREDENTIAL_ERROR"
+    elif data_gap_count > 0 and hydrated_attempts == 0:
+        hydration = "PARKED_DATA_GAP"
+    elif (data_gap_count > 0 or hydration_pending > 0) and hydrated_attempts > 0:
+        hydration = "PARTIAL"
+    else:
+        hydration = "READY"
+
+    if candidate_count == 0:
+        options_discovery = "NO_CANDIDATES"
+    elif hydration in {"PARKED_CREDENTIAL_ERROR", "PARKED_DATA_GAP"} and hydrated_attempts == 0:
+        options_discovery = "PARKED_DATA_GAP"
+    elif hydration == "PARTIAL":
+        options_discovery = "PARTIAL"
+    else:
+        options_discovery = "READY"
+
+    if hydration in {"PARKED_CREDENTIAL_ERROR", "PARKED_DATA_GAP"} and hydrated_attempts == 0:
+        structure_build = "PARKED_HYDRATION_REQUIRED"
+    elif no_viable > 0 and (primary_count + watch_count + approved_count) == 0:
+        structure_build = "NO_VIABLE_STRUCTURE"
+    elif no_viable > 0:
+        structure_build = "PARTIAL"
+    else:
+        structure_build = "READY"
+
+    selected_expression: str | None = None
+    if not expressions_df.empty:
+        prim = expressions_df[
+            expressions_df.get("expression_status", pd.Series(dtype=str)).astype(str)
+            == SpreadExpressionStatus.PRIMARY.value
+        ]
+        if not prim.empty:
+            selected_expression = str(prim.iloc[0].get("expression_id", "") or "").strip() or None
+    primary_evidence = primary_count > 0 or selected_expression is not None
+
+    if approved_count > 0 and primary_evidence:
+        quality_gate = "PASS"
+    elif watch_count > 0 and approved_count == 0:
+        quality_gate = "WATCH"
+    elif candidate_count == 0:
+        quality_gate = "NO_ACTION_QUALITY"
+    elif structure_build == "NO_VIABLE_STRUCTURE" or geometry_rejects:
+        quality_gate = "NO_ACTION_QUALITY"
+    else:
+        quality_gate = "FAIL"
+
+    if quality_gate != "PASS":
+        selected_expression = None
+
+    if not gate.paper_approval_allowed:
+        paper_action = "FORBIDDEN_SAFETY"
+    elif credential_parked:
+        paper_action = "WITHHELD_CREDENTIALS"
+    elif hydration in {"PARKED_DATA_GAP"} or options_discovery == "PARKED_DATA_GAP":
+        paper_action = "WITHHELD_DATA_GAP"
+    elif quality_gate == "PASS":
+        paper_action = "ALLOWED"
+    else:
+        paper_action = "WITHHELD_QUALITY"
+
+    reasons = list(summary.get("top_rejection_reasons", []))
+    if watch_count > 0 and "operator_watch_review_required" not in reasons:
+        reasons = ["operator_watch_review_required", *reasons]
+    top_reasons = reasons[:5]
+
+    next_action = ""
+    if quality_gate == "WATCH" and selected_expression is None:
+        next_action = "Explicit operator WATCH review/promotion required; no auto-promotion."
+    elif paper_action == "WITHHELD_QUALITY":
+        next_action = "No paper action. Quality gate withheld selection."
+
+    return {
+        "run_status": manifest.status,
+        "woke": True,
+        "macro_context": _morning_macro_context(gate),
+        "hydration": hydration,
+        "options_discovery": options_discovery,
+        "structure_build": structure_build,
+        "quality_gate": quality_gate,
+        "paper_action": paper_action,
+        "selected_expression": selected_expression,
+        "candidate_count": candidate_count,
+        "parked_count": parked_count,
+        "rejected_count": rejected_count,
+        "top_reasons": top_reasons,
+        "operator_next_action": next_action,
+    }
+
+
 def build_run_advisory(
     base_dir: Path,
     manifest: OrbRunManifest,
@@ -80,11 +219,18 @@ def build_run_advisory(
     expressions_df = pd.DataFrame()
     expressions_path = Path(manifest.expressions_artifact or "")
     if expressions_path.is_file():
-        expressions_df = pd.read_csv(expressions_path)
+        try:
+            expressions_df = pd.read_csv(expressions_path)
+        except pd.errors.EmptyDataError:
+            expressions_df = pd.DataFrame()
         if manifest.run_id and "run_id" in expressions_df.columns:
             expressions_df = expressions_df[
                 expressions_df["run_id"].astype(str) == str(manifest.run_id)
             ]
+    risk_df = pd.DataFrame()
+    risk_path = Path(manifest.risk_audit_artifact or "")
+    if risk_path.is_file():
+        risk_df = pd.read_csv(risk_path)
 
     spot_by_symbol: dict[str, float] = {}
     if not context_df.empty and "symbol" in context_df.columns:
@@ -166,6 +312,12 @@ def build_run_advisory(
             "structure_summary": dealer.structure_summary,
         },
         "spread_skeptic_notes": [asdict(n) for n in skeptic_notes],
+        "morning_regime_status": _build_morning_regime_status(
+            manifest,
+            gate,
+            risk_df,
+            expressions_df,
+        ),
         "frontier_review_required_before_paper": frontier.frontier_review_required_before_paper,
         "expression_frontier_summaries": [asdict(s) for s in frontier.symbol_summaries],
         "expression_frontier_rows": frontier.expression_rows,

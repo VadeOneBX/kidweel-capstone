@@ -101,6 +101,16 @@ def generate_claude_brief(
         "**No AM note, no paper approval.** Raw context finds the board. "
         "The AM note explains the board. The advisor decides whether the spread deserves attention."
     )
+    morning = advisory_payload.get("morning_regime_status", {})
+    if not isinstance(morning, dict):
+        morning = {}
+    no_action_language = ""
+    if str(morning.get("paper_action", "")) == "WITHHELD_QUALITY":
+        no_action_language = (
+            "No paper action. Quality gate withheld selection. "
+            "Options were evaluated; no structure met quality requirements. "
+            "Morning Regime completed with no-action decision."
+        )
 
     body = f"""# Kidweel Morning Brief
 
@@ -133,6 +143,24 @@ Dealer structure bias (pre-AM): `{dealer_struct.get("advisory_bias", "") if isin
 Gamma regime: `{dealer_struct.get("gamma_regime", "") if isinstance(dealer_struct, dict) else ""}`
 
 Run advisory JSON: `{run_advisory_result.advisory_json_artifact}`
+
+## Morning Regime status (operator lanes)
+
+- woke: `{morning.get("woke", False)}`
+- macro_context: `{morning.get("macro_context", "")}`
+- hydration: `{morning.get("hydration", "")}`
+- options_discovery: `{morning.get("options_discovery", "")}`
+- structure_build: `{morning.get("structure_build", "")}`
+- quality_gate: `{morning.get("quality_gate", "")}`
+- paper_action: `{morning.get("paper_action", "")}`
+- selected_expression: `{morning.get("selected_expression", None)}`
+- candidate_count: {morning.get("candidate_count", 0)}
+- parked_count: {morning.get("parked_count", 0)}
+- rejected_count: {morning.get("rejected_count", 0)}
+- top_reasons: {morning.get("top_reasons", [])}
+- operator_next_action: `{morning.get("operator_next_action", "")}`
+
+{no_action_language}
 
 ## Intake
 

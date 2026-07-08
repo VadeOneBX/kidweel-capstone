@@ -63,6 +63,14 @@ cat logs/morning_regime_latest.json
 
 `orb_morning_loop.py` runs ingestion wake again at loop start; that is expected. Fast advisory and the audit file are produced when the staged workbook includes the upgraded sheets. Paper submission remains gated by existing risk and macro gates.
 
+### No-action outcomes
+
+- Do nothing is a first-class output.
+- No paper action can mean quality gates worked as intended.
+- Morning Regime should complete with artifacts even when no expression is selected.
+- Reserve "blocked" for true missing required inputs or safety violations.
+- `paper_approval_allowed=true` means paper consideration is not safety-blocked; it is **not** trade selection or submit approval.
+
 ## Run wake only
 
 ```bash
