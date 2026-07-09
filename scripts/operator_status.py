@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import json
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from qops.advisory.run_readiness import format_readiness_report, run_advisory_json_path
 from qops.advisory.subagent_ideas import (
     TIER3_AGENTS,
     count_idea_types,
@@ -26,6 +28,11 @@ def parse_args() -> argparse.Namespace:
         "--ideas-summary",
         action="store_true",
         help="Read-only summary of latest post-ORB Tier 3 idea artifacts",
+    )
+    parser.add_argument(
+        "--readiness",
+        action="store_true",
+        help="Print macro/hydration/selection readiness lanes from run advisory JSON",
     )
     return parser.parse_args()
 
@@ -86,6 +93,39 @@ def print_ideas_summary(base_dir: Path) -> int:
     return 0
 
 
+def _resolve_run_id(base_dir: Path, run_date: str, run_id: str | None) -> str | None:
+    if run_id:
+        return run_id
+    path = manifest_path(base_dir, run_date)
+    if not path.is_file():
+        return None
+    manifest = read_manifest(base_dir, run_date)
+    return manifest.run_id
+
+
+def print_readiness(base_dir: Path, *, run_date: str, run_id: str | None) -> int:
+    resolved_run_id = _resolve_run_id(base_dir, run_date, run_id)
+    if not resolved_run_id:
+        print(f"NO_MANIFEST_FOUND: {manifest_path(base_dir, run_date)}")
+        return 1
+
+    advisory_path = run_advisory_json_path(base_dir, resolved_run_id)
+    if not advisory_path.is_file():
+        print(f"NO_RUN_ADVISORY_FOUND: {advisory_path}")
+        return 1
+
+    payload = json.loads(advisory_path.read_text(encoding="utf-8"))
+    readiness = payload.get("run_readiness", {})
+    if not isinstance(readiness, dict):
+        readiness = {}
+    readiness = {
+        **readiness,
+        "morning_regime_status": payload.get("morning_regime_status", {}),
+    }
+    print(format_readiness_report(readiness))
+    return 0
+
+
 def main() -> int:
     args = parse_args()
     base_dir = Path(args.base_dir).resolve()
@@ -94,6 +134,9 @@ def main() -> int:
         return print_ideas_summary(base_dir)
 
     run_date = args.date or datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
+
+    if args.readiness:
+        return print_readiness(base_dir, run_date=run_date, run_id=args.run_id)
 
     if args.run_id:
         path = base_dir / "data" / "runs" / run_date / f"{args.run_id}_orb_manifest.json"

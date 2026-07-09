@@ -1,6 +1,6 @@
 # Claude Advisor context
 
-How the **claude-advisor** repo skill/subagent fits Kidweel: the only **interpretive** project skill in [SUBAGENCY-PROOF-C1](./subagency-proof.md).
+How the **claude-advisor** repo skill/subagent fits Kidweel: the only **interpretive** project skill in [SUBAGENCY-PROOF-C2](./subagency-proof.md).
 
 **Not the same as:** **Claude.ai desktop** (operator review / future allowlisted commands), **Claude mobile** (review-only unless allowlisted), or **Claude Code / Cursor Claude** (IDE repo edits). Those surfaces do not replace claude-advisor labels or gain approval/transport authority.
 

@@ -29,6 +29,7 @@ from qops.advisory.expression_frontier import (
 )
 from qops.advisory.spread_skeptic import SpreadSkepticNote, build_spread_skeptic_notes
 from qops.runtime.orb_manifest import OrbRunManifest
+from qops.advisory.run_readiness import build_run_readiness
 from qops.risk.guard_runner import summarize_risk_audit
 from qops.schemas.candidate_loop import CandidateLoopStatus, SpreadExpressionStatus
 
@@ -60,15 +61,15 @@ def _macro_posture_label(gate: MacroPaperGate) -> str:
 
 
 def _morning_macro_context(gate: MacroPaperGate) -> str:
-    if gate.macro_context_state == "AM_NOTE_CONTEXT_READY":
-        return "READY"
-    if gate.macro_context_state == "MANUAL_CONTEXT_OVERRIDE":
-        return "READY_LOW_CONFIDENCE"
-    if gate.am_note_status == "AVAILABLE_NOT_PARSED":
-        return "UNPARSED_NON_BLOCKING"
-    if gate.am_note_status == "NOT_AVAILABLE":
-        return "MISSING_NON_BLOCKING"
-    return "READY_LOW_CONFIDENCE"
+    mapping = {
+        "MACRO_CONTEXT_READY": "READY",
+        "MACRO_CONTEXT_READY_LOW_CONFIDENCE": "READY_LOW_CONFIDENCE",
+        "MACRO_CONTEXT_UNPARSED_NON_BLOCKING": "UNPARSED_NON_BLOCKING",
+        "MACRO_CONTEXT_MISSING_NON_BLOCKING": "MISSING_NON_BLOCKING",
+        "MANUAL_CONTEXT_OVERRIDE": "READY_LOW_CONFIDENCE",
+        "AM_NOTE_STALE_REVIEW_REQUIRED": "READY_LOW_CONFIDENCE",
+    }
+    return mapping.get(gate.macro_readiness_status, "READY_LOW_CONFIDENCE")
 
 
 def _has_reason_token(risk_df: pd.DataFrame, tokens: tuple[str, ...]) -> bool:
@@ -291,6 +292,12 @@ def build_run_advisory(
     else:
         frontier_csv = None
 
+    readiness = build_run_readiness(
+        gate,
+        risk_df,
+        risk_audit_artifact=manifest.risk_audit_artifact,
+    )
+
     payload: dict[str, object] = {
         "run_id": manifest.run_id,
         "am_note_status": gate.am_note_status,
@@ -303,6 +310,10 @@ def build_run_advisory(
         "spread_posture": gate.spread_posture,
         "am_note_required_before_paper": gate.am_note_required_before_paper,
         "paper_approval_allowed": gate.paper_approval_allowed,
+        "macro_readiness_status": gate.macro_readiness_status,
+        "macro_context_source": gate.macro_context_source,
+        "macro_blocks_run": gate.macro_blocks_run,
+        "run_readiness": readiness.to_dict(),
         "pre_am_structure": asdict(pre_am),
         "dealer_structure": {
             "gamma_regime": dealer.gamma_regime,

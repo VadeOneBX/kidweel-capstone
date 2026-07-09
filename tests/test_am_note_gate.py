@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 import pandas as pd
 
@@ -49,13 +49,14 @@ def _passing_spread_row(**overrides: object) -> SpreadCandidateInputRow:
     return SpreadCandidateInputRow(**base)  # type: ignore[arg-type]
 
 
-def test_macro_gate_withholds_without_am_note(tmp_path: Path) -> None:
+def test_macro_gate_missing_am_note_is_non_blocking(tmp_path: Path) -> None:
     gate = build_macro_paper_gate(tmp_path, run_id="2026-06-23-manual")
     assert gate.am_note_status == "NOT_AVAILABLE"
-    assert gate.macro_context_state == "PRE_AM_NOTE_CONTEXT_INCOMPLETE"
-    assert gate.am_note_required_before_paper is True
-    assert gate.paper_approval_allowed is False
-    assert "incomplete" in gate.macro_context_summary.lower()
+    assert gate.macro_readiness_status == "MACRO_CONTEXT_MISSING_NON_BLOCKING"
+    assert gate.am_note_required_before_paper is False
+    assert gate.paper_approval_allowed is True
+    assert gate.macro_blocks_run is False
+    assert "non-blocking" in gate.macro_context_summary.lower()
 
 
 def test_parse_am_note_json_example(tmp_path: Path) -> None:
@@ -79,8 +80,13 @@ def test_parse_am_note_json_example(tmp_path: Path) -> None:
     assert len(parsed.macro_catalysts) == 2
 
 
-def test_apply_paper_gate_downgrades_approval(tmp_path: Path) -> None:
+def test_apply_paper_gate_downgrades_approval_when_macro_blocks(tmp_path: Path) -> None:
     gate = build_macro_paper_gate(tmp_path, run_id="2026-06-23-manual")
+    gate = replace(
+        gate,
+        paper_approval_allowed=False,
+        am_note_required_before_paper=True,
+    )
     audit = pd.DataFrame(
         [
             {
@@ -95,7 +101,7 @@ def test_apply_paper_gate_downgrades_approval(tmp_path: Path) -> None:
     assert out.iloc[0]["reject_reason"] == PAPER_GATE_AM_NOTE_INCOMPLETE
 
 
-def test_spread_candidate_guard_applies_am_note_gate(tmp_path: Path) -> None:
+def test_spread_candidate_guard_does_not_withhold_when_macro_non_blocking(tmp_path: Path) -> None:
     candidates = tmp_path / "spread_candidates.csv"
     row = _passing_spread_row()
     pd.DataFrame([asdict(row)]).to_csv(candidates, index=False)
@@ -106,8 +112,7 @@ def test_spread_candidate_guard_applies_am_note_gate(tmp_path: Path) -> None:
         candidates_artifact=str(candidates),
     )
     audit = pd.read_csv(result.risk_audit_artifact)
-    assert audit.iloc[0]["classification"] == "PAPER_GATE_WITHHELD"
-    assert audit.iloc[0]["reject_reason"] == PAPER_GATE_AM_NOTE_INCOMPLETE
+    assert audit.iloc[0]["classification"] == "APPROVED_PAPER"
 
 
 def test_manual_override_allows_paper_gate(tmp_path: Path) -> None:

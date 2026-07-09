@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _SCRIPT = _REPO_ROOT / "scripts" / "operator_status.py"
+_SUBPROCESS_ENV = {**os.environ, "PYTHONPATH": str(_REPO_ROOT / "src")}
 
 
 def _run_operator_status(*args: str, base_dir: Path) -> subprocess.CompletedProcess[str]:
@@ -17,6 +19,7 @@ def _run_operator_status(*args: str, base_dir: Path) -> subprocess.CompletedProc
         capture_output=True,
         text=True,
         check=False,
+        env=_SUBPROCESS_ENV,
     )
 
 
@@ -91,6 +94,56 @@ def test_operator_status_ideas_summary_degrades_when_no_ideas_exist(tmp_path: Pa
     proc = _run_operator_status("--ideas-summary", base_dir=tmp_path)
     assert proc.returncode == 0
     assert proc.stdout.strip() == "NO_IDEA_ARTIFACTS_FOUND"
+
+
+def test_operator_status_readiness_reads_run_advisory(tmp_path: Path) -> None:
+    run_id = "2026-07-08-manual-093942"
+    advisory_dir = tmp_path / "data/advisory"
+    advisory_dir.mkdir(parents=True)
+    (advisory_dir / f"{run_id}_run_advisory.json").write_text(
+        json.dumps(
+            {
+                "run_id": run_id,
+                "run_readiness": {
+                    "woke": True,
+                    "macro": {
+                        "status": "MACRO_CONTEXT_READY_LOW_CONFIDENCE",
+                        "source": "xlsx_founders_note",
+                        "summary": "low confidence",
+                        "blocks_run": False,
+                    },
+                    "hydration": {
+                        "status": "PARKED_CREDENTIAL_ERROR",
+                        "reason": "credential_error:no_credential_pair",
+                        "parked_count": 49,
+                    },
+                    "selection": {
+                        "status": "PARKED",
+                        "reason": "credential_error:no_credential_pair",
+                        "parked_count": 49,
+                    },
+                },
+                "morning_regime_status": {
+                    "quality_gate": "NO_ACTION_QUALITY",
+                    "paper_action": "WITHHELD_CREDENTIALS",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_operator_status(
+        "--readiness",
+        "--run-id",
+        run_id,
+        "--date",
+        "2026-07-08",
+        base_dir=tmp_path,
+    )
+    assert proc.returncode == 0
+    assert "MACRO_CONTEXT_READY_LOW_CONFIDENCE" in proc.stdout
+    assert "PARKED_CREDENTIAL_ERROR" in proc.stdout
+    assert "blocked" not in proc.stdout.lower()
 
 
 def test_operator_status_ideas_summary_is_read_only(tmp_path: Path) -> None:

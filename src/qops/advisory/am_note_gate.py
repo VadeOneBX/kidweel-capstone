@@ -28,6 +28,23 @@ MacroContextState = Literal[
     "MANUAL_CONTEXT_OVERRIDE",
 ]
 
+MacroReadinessStatus = Literal[
+    "MACRO_CONTEXT_READY",
+    "MACRO_CONTEXT_READY_LOW_CONFIDENCE",
+    "MACRO_CONTEXT_UNPARSED_NON_BLOCKING",
+    "MACRO_CONTEXT_MISSING_NON_BLOCKING",
+    "MANUAL_CONTEXT_OVERRIDE",
+    "AM_NOTE_STALE_REVIEW_REQUIRED",
+]
+
+MacroContextSource = Literal[
+    "manual_override",
+    "structured_sidecar",
+    "xlsx_founders_note",
+    "unparsed_present",
+    "missing",
+]
+
 PAPER_GATE_AM_NOTE_INCOMPLETE = "paper_gate:am_note_context_incomplete"
 
 _AM_NOTE_PARSED_KEYS = frozenset(
@@ -71,6 +88,8 @@ class AmNoteParsed:
 class MacroPaperGate:
     am_note_status: AmNoteStatus
     macro_context_state: MacroContextState
+    macro_readiness_status: MacroReadinessStatus
+    macro_context_source: MacroContextSource
     paper_gate_macro_status: str
     macro_context_summary: str
     dealer_positioning_summary: str
@@ -79,6 +98,7 @@ class MacroPaperGate:
     am_note_required_before_paper: bool
     parsed_note: AmNoteParsed | None = None
     paper_approval_allowed: bool = False
+    macro_blocks_run: bool = False
 
 
 def run_date_from_run_id(run_id: str) -> str:
@@ -114,14 +134,234 @@ def discover_morning_regime_paths(
     if run_date:
         staging = base_dir / "data/spotgamma/staging"
         if staging.is_dir():
-            for pattern in (f"{run_date}_morning_regime.*", f"{run_date}_*morning_regime*"):
+            for pattern in (
+                f"{run_date}_morning_regime.*",
+                f"{run_date}_*morning_regime*",
+                f"{run_date}_morning_regime.json",
+                f"{run_date}_morning_regime.csv",
+            ):
                 for p in staging.glob(pattern):
                     if p.is_file():
                         key = str(p.resolve())
                         if key not in seen:
                             seen.add(key)
                             found.append(p)
+        raw_dir = base_dir / "data/spotgamma/raw" / run_date
+        if raw_dir.is_dir():
+            for p in raw_dir.glob("*morning_regime*"):
+                if p.is_file():
+                    key = str(p.resolve())
+                    if key not in seen:
+                        seen.add(key)
+                        found.append(p)
     return found
+
+
+def _infer_advisory_bias_from_prose(prose: str) -> str:
+    lower = prose.lower()
+    if any(word in lower for word in ("defensive", "sell-off", "selloff", "downside", "risk-off")):
+        return "defensive"
+    if any(word in lower for word in ("constructive", "risk-on", "upside", "bullish")):
+        return "constructive"
+    return "review"
+
+
+def parse_founders_note_prose_from_xlsx(path: Path, *, session_date: str = "") -> AmNoteParsed | None:
+    """Low-confidence fallback: Founder note prose from the morning_regime XLSX tab."""
+    if not path.is_file() or path.suffix.lower() not in {".xlsx", ".xls"}:
+        return None
+    try:
+        df = pd.read_excel(
+            path,
+            sheet_name="morning_regime",
+            engine="openpyxl",
+            header=None,
+        )
+    except (OSError, ValueError, KeyError):
+        return None
+    lines: list[str] = []
+    for val in df.iloc[:, 0] if not df.empty else []:
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            continue
+        text = str(val).strip()
+        if text:
+            lines.append(text)
+    if not lines:
+        return None
+    prose = "\n".join(lines)
+    if len(prose) < 20:
+        return None
+    return AmNoteParsed(
+        market_direction_summary=prose[:4000],
+        advisory_bias=_infer_advisory_bias_from_prose(prose),
+        spread_posture="retain candidates; review Founder note prose (low confidence)",
+        note_trade_date=session_date,
+    )
+
+
+def _structured_sidecar_paths(paths: list[Path]) -> list[Path]:
+    return [p for p in paths if p.suffix.lower() in {".json", ".csv"}]
+
+
+def _xlsx_workbook_paths(paths: list[Path]) -> list[Path]:
+    return [p for p in paths if p.suffix.lower() in {".xlsx", ".xls"}]
+
+
+@dataclass(frozen=True, slots=True)
+class MacroContextResolution:
+    am_note_status: AmNoteStatus
+    macro_context_state: MacroContextState
+    macro_readiness_status: MacroReadinessStatus
+    macro_context_source: MacroContextSource
+    parsed_note: AmNoteParsed | None
+    paper_gate_macro_status: str
+    macro_context_summary: str
+    dealer_positioning_summary: str
+    macro_catalyst_summary: str
+    spread_posture: str
+
+
+def resolve_macro_context_priority(
+    base_dir: Path,
+    *,
+    run_id: str,
+    staged_files: list[str] | None = None,
+) -> MacroContextResolution:
+    """
+    Priority:
+    1. Manual override JSON
+    2. Structured AM-note JSON/CSV sidecar
+    3. XLSX Founder note prose (low confidence)
+    4. UNPARSED_NON_BLOCKING / MISSING_NON_BLOCKING
+    """
+    session_date = run_date_from_run_id(run_id)
+    override = _load_override(base_dir, run_id)
+    paths = discover_morning_regime_paths(
+        base_dir,
+        run_date=session_date,
+        staged_files=staged_files,
+    )
+
+    if override:
+        status_raw = str(override.get("am_note_status", "") or "").strip().upper()
+        if status_raw == "MANUAL_OVERRIDE" or bool(override.get("manual_override")):
+            parsed = None
+            if override.get("parsed_note") and isinstance(override["parsed_note"], dict):
+                parsed = _row_to_parsed(override["parsed_note"], trade_date=session_date)
+            macro_summary = str(override.get("macro_context_summary", "") or "").strip()
+            if not macro_summary:
+                macro_summary = "Operator recorded manual macro context override."
+                spread_posture = str(override.get("spread_posture", "") or "").strip()
+                dealer_summary, catalyst_summary, parsed_posture = "", "", ""
+                if parsed is not None:
+                    _, dealer_summary, catalyst_summary, parsed_posture = _summaries_from_parsed(parsed)
+                if not spread_posture:
+                    spread_posture = parsed_posture
+            return MacroContextResolution(
+                am_note_status="MANUAL_OVERRIDE",
+                macro_context_state="MANUAL_CONTEXT_OVERRIDE",
+                macro_readiness_status="MANUAL_CONTEXT_OVERRIDE",
+                macro_context_source="manual_override",
+                parsed_note=parsed,
+                paper_gate_macro_status="manual_macro_context_override",
+                macro_context_summary=macro_summary,
+                dealer_positioning_summary=dealer_summary,
+                macro_catalyst_summary=catalyst_summary,
+                spread_posture=spread_posture or parsed_posture,
+            )
+
+    for path in _structured_sidecar_paths(paths):
+        parsed = parse_am_note_file(path, session_date=session_date)
+        if parsed is None:
+            continue
+        if not _parsed_is_complete(parsed):
+            continue
+        note_date = (parsed.note_trade_date or session_date).strip()
+        if session_date and note_date and note_date < session_date:
+            macro_summary = (
+                "AM note is stale relative to session date; review required before paper approval."
+            )
+            return MacroContextResolution(
+                am_note_status="STALE",
+                macro_context_state="AM_NOTE_STALE_REVIEW_REQUIRED",
+                macro_readiness_status="AM_NOTE_STALE_REVIEW_REQUIRED",
+                macro_context_source="structured_sidecar",
+                parsed_note=parsed,
+                paper_gate_macro_status="am_note_stale_review_required",
+                macro_context_summary=macro_summary,
+                dealer_positioning_summary="",
+                macro_catalyst_summary="",
+                spread_posture=parsed.spread_posture,
+            )
+        macro_summary, dealer_summary, catalyst_summary, spread_posture = _summaries_from_parsed(parsed)
+        bias = parsed.advisory_bias or "reviewed"
+        return MacroContextResolution(
+            am_note_status="PARSED",
+            macro_context_state="AM_NOTE_CONTEXT_READY",
+            macro_readiness_status="MACRO_CONTEXT_READY",
+            macro_context_source="structured_sidecar",
+            parsed_note=parsed,
+            paper_gate_macro_status="am_note_context_ready",
+            macro_context_summary=(
+                f"AM note parsed (structured sidecar). Macro posture is {bias}. {macro_summary}"
+            ).strip(),
+            dealer_positioning_summary=dealer_summary,
+            macro_catalyst_summary=catalyst_summary,
+            spread_posture=spread_posture,
+        )
+
+    for path in _xlsx_workbook_paths(paths):
+        parsed = parse_founders_note_prose_from_xlsx(path, session_date=session_date)
+        if parsed is None:
+            continue
+        macro_summary, dealer_summary, catalyst_summary, spread_posture = _summaries_from_parsed(parsed)
+        bias = parsed.advisory_bias or "review"
+        return MacroContextResolution(
+            am_note_status="PARSED",
+            macro_context_state="AM_NOTE_CONTEXT_READY",
+            macro_readiness_status="MACRO_CONTEXT_READY_LOW_CONFIDENCE",
+            macro_context_source="xlsx_founders_note",
+            parsed_note=parsed,
+            paper_gate_macro_status="xlsx_founders_note_low_confidence",
+            macro_context_summary=(
+                f"Founder note prose parsed from workbook (low confidence). Macro posture is {bias}. "
+                f"{macro_summary[:500]}"
+            ).strip(),
+            dealer_positioning_summary=dealer_summary,
+            macro_catalyst_summary=catalyst_summary,
+            spread_posture=spread_posture,
+        )
+
+    if paths:
+        return MacroContextResolution(
+            am_note_status="AVAILABLE_NOT_PARSED",
+            macro_context_state="PRE_AM_NOTE_CONTEXT_INCOMPLETE",
+            macro_readiness_status="MACRO_CONTEXT_UNPARSED_NON_BLOCKING",
+            macro_context_source="unparsed_present",
+            parsed_note=None,
+            paper_gate_macro_status="am_note_present_unparsed",
+            macro_context_summary=(
+                "AM note artifact present but not parsed. Hydration continues; macro is non-blocking."
+            ),
+            dealer_positioning_summary="",
+            macro_catalyst_summary="",
+            spread_posture="retain candidates; macro context unparsed (non-blocking)",
+        )
+
+    return MacroContextResolution(
+        am_note_status="NOT_AVAILABLE",
+        macro_context_state="PRE_AM_NOTE_CONTEXT_INCOMPLETE",
+        macro_readiness_status="MACRO_CONTEXT_MISSING_NON_BLOCKING",
+        macro_context_source="missing",
+        parsed_note=None,
+        paper_gate_macro_status="am_note_missing",
+        macro_context_summary=(
+            "No AM Founder note artifact found. Hydration continues; macro is non-blocking."
+        ),
+        dealer_positioning_summary="",
+        macro_catalyst_summary="",
+        spread_posture="retain candidates; macro context missing (non-blocking)",
+    )
 
 
 def _load_override(base_dir: Path, run_id: str) -> dict[str, object] | None:
@@ -273,14 +513,35 @@ def resolve_macro_context_state(
 
 
 def paper_approval_allowed_for_macro(
-    am_note_status: AmNoteStatus,
-    macro_context_state: MacroContextState,
+    resolution: MacroContextResolution,
 ) -> bool:
-    if macro_context_state == "MANUAL_CONTEXT_OVERRIDE":
+    """Degrade-not-block: missing/unparsed macro does not safety-block paper consideration."""
+    if resolution.macro_readiness_status == "MANUAL_CONTEXT_OVERRIDE":
         return True
-    if am_note_status == "MANUAL_OVERRIDE":
+    if resolution.am_note_status == "MANUAL_OVERRIDE":
         return True
-    return am_note_status == "PARSED" and macro_context_state == "AM_NOTE_CONTEXT_READY"
+    if resolution.am_note_status == "PARSED":
+        return True
+    if resolution.macro_readiness_status in {
+        "MACRO_CONTEXT_UNPARSED_NON_BLOCKING",
+        "MACRO_CONTEXT_MISSING_NON_BLOCKING",
+    }:
+        return True
+    return False
+
+
+def am_note_required_before_paper_for_macro(resolution: MacroContextResolution) -> bool:
+    """Structured high-confidence AM note still preferred; low-confidence paths do not hard-require."""
+    if resolution.macro_readiness_status == "MACRO_CONTEXT_READY":
+        return False
+    if resolution.macro_readiness_status in {
+        "MANUAL_CONTEXT_OVERRIDE",
+        "MACRO_CONTEXT_READY_LOW_CONFIDENCE",
+        "MACRO_CONTEXT_UNPARSED_NON_BLOCKING",
+        "MACRO_CONTEXT_MISSING_NON_BLOCKING",
+    }:
+        return False
+    return resolution.am_note_status != "PARSED"
 
 
 def _summaries_from_parsed(parsed: AmNoteParsed | None) -> tuple[str, str, str, str]:
@@ -316,65 +577,28 @@ def build_macro_paper_gate(
     run_id: str,
     staged_files: list[str] | None = None,
 ) -> MacroPaperGate:
-    session_date = run_date_from_run_id(run_id)
-    override = _load_override(base_dir, run_id)
-    paths = discover_morning_regime_paths(
+    resolution = resolve_macro_context_priority(
         base_dir,
-        run_date=session_date,
+        run_id=run_id,
         staged_files=staged_files,
     )
-    am_status, parsed = resolve_am_note_status(
-        paths,
-        session_date=session_date,
-        override=override,
-    )
-    macro_state = resolve_macro_context_state(am_status, override=override)
-    allowed = paper_approval_allowed_for_macro(am_status, macro_state)
-
-    macro_summary, dealer_summary, catalyst_summary, spread_posture = _summaries_from_parsed(parsed)
-
-    if macro_state == "MANUAL_CONTEXT_OVERRIDE":
-        paper_gate_status = "manual_macro_context_override"
-        macro_context_summary = macro_summary or "Operator recorded manual macro context override."
-    elif am_status == "PARSED":
-        paper_gate_status = "am_note_context_ready"
-        bias = parsed.advisory_bias if parsed else ""
-        macro_context_summary = (
-            f"AM note parsed. Macro posture is {bias or 'reviewed'}. "
-            f"{macro_summary}"
-        ).strip()
-    elif am_status == "STALE":
-        paper_gate_status = "am_note_stale_review_required"
-        macro_context_summary = (
-            "AM note is stale relative to session date; review required before paper approval."
-        )
-    elif am_status == "AVAILABLE_NOT_PARSED":
-        paper_gate_status = "am_note_present_unparsed"
-        macro_context_summary = (
-            "Context incomplete. Hydration is allowed, but paper approval waits for AM note review."
-        )
-    else:
-        paper_gate_status = "am_note_missing"
-        macro_context_summary = (
-            "Context incomplete. Hydration is allowed, but paper approval waits for AM note review."
-        )
-
-    if not spread_posture and am_status != "PARSED":
-        spread_posture = (
-            "retain candidates; withhold paper approval until AM Founder note is parsed"
-        )
+    allowed = paper_approval_allowed_for_macro(resolution)
+    required = am_note_required_before_paper_for_macro(resolution)
 
     return MacroPaperGate(
-        am_note_status=am_status,
-        macro_context_state=macro_state,
-        paper_gate_macro_status=paper_gate_status,
-        macro_context_summary=macro_context_summary,
-        dealer_positioning_summary=dealer_summary,
-        macro_catalyst_summary=catalyst_summary,
-        spread_posture=spread_posture,
-        am_note_required_before_paper=not allowed,
-        parsed_note=parsed,
+        am_note_status=resolution.am_note_status,
+        macro_context_state=resolution.macro_context_state,
+        macro_readiness_status=resolution.macro_readiness_status,
+        macro_context_source=resolution.macro_context_source,
+        paper_gate_macro_status=resolution.paper_gate_macro_status,
+        macro_context_summary=resolution.macro_context_summary,
+        dealer_positioning_summary=resolution.dealer_positioning_summary,
+        macro_catalyst_summary=resolution.macro_catalyst_summary,
+        spread_posture=resolution.spread_posture,
+        am_note_required_before_paper=required,
+        parsed_note=resolution.parsed_note,
         paper_approval_allowed=allowed,
+        macro_blocks_run=False,
     )
 
 

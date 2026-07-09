@@ -71,6 +71,21 @@ cat logs/morning_regime_latest.json
 - Reserve "blocked" for true missing required inputs or safety violations.
 - `paper_approval_allowed=true` means paper consideration is not safety-blocked; it is **not** trade selection or submit approval.
 
+### Macro input priority (degrade-not-block)
+
+Morning Regime macro context resolves in this order:
+
+1. Manual `{run_id}_macro_context_override.json`
+2. Structured AM-note `.json` / `.csv` sidecar
+3. XLSX Founder note prose on the `morning_regime` tab (low confidence)
+4. `UNPARSED_NON_BLOCKING` / `MISSING_NON_BLOCKING` — hydration continues; macro does not hard-block the run
+
+Credential gaps park **hydration** only. Inspect readiness lanes:
+
+```bash
+uv run python scripts/operator_status.py --base-dir . --run-id <run_id> --readiness
+```
+
 ## Run wake only
 
 ```bash

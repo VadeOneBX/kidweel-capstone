@@ -98,8 +98,19 @@ def generate_claude_brief(
     dealer_struct = advisory_payload.get("dealer_structure", {})
 
     policy_line = (
-        "**No AM note, no paper approval.** Raw context finds the board. "
-        "The AM note explains the board. The advisor decides whether the spread deserves attention."
+        "Macro context may be incomplete; hydration and expression search continue. "
+        "Missing or unparsed AM Founder note does not hard-block the morning run. "
+        "Credential gaps park hydration only. Paper approval is not trade selection."
+    )
+    readiness = advisory_payload.get("run_readiness", {})
+    if not isinstance(readiness, dict):
+        readiness = {}
+    macro_lane = readiness.get("macro", {}) if isinstance(readiness.get("macro"), dict) else {}
+    hydration_lane = (
+        readiness.get("hydration", {}) if isinstance(readiness.get("hydration"), dict) else {}
+    )
+    selection_lane = (
+        readiness.get("selection", {}) if isinstance(readiness.get("selection"), dict) else {}
     )
     morning = advisory_payload.get("morning_regime_status", {})
     if not isinstance(morning, dict):
@@ -128,6 +139,9 @@ Mode: `{manifest.mode}`
 | `macro_context_state` | `{advisory_payload.get("macro_context_state", "")}` |
 | `paper_gate_macro_status` | `{advisory_payload.get("paper_gate_macro_status", "")}` |
 | `am_note_required_before_paper` | `{am_required}` |
+| `macro_readiness_status` | `{advisory_payload.get("macro_readiness_status", "")}` |
+| `macro_context_source` | `{advisory_payload.get("macro_context_source", "")}` |
+| `macro_blocks_run` | `{advisory_payload.get("macro_blocks_run", False)}` |
 
 **Macro context:** {macro_summary}
 
@@ -161,6 +175,14 @@ Run advisory JSON: `{run_advisory_result.advisory_json_artifact}`
 - operator_next_action: `{morning.get("operator_next_action", "")}`
 
 {no_action_language}
+
+## Run readiness (degrade-not-block lanes)
+
+- macro: `{macro_lane.get("status", "")}` / `{macro_lane.get("source", "")}`
+- hydration: `{hydration_lane.get("status", "")}` / `{hydration_lane.get("reason", "")}`
+- selection: `{selection_lane.get("status", "")}` / `{selection_lane.get("reason", "")}`
+- hydration_parked_count: {hydration_lane.get("parked_count", 0)}
+- selection_parked_count: {selection_lane.get("parked_count", 0)}
 
 ## Intake
 
