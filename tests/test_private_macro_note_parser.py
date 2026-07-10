@@ -61,3 +61,32 @@ def test_macro_note_macro_and_skew_fields() -> None:
     assert "Put skew" in parsed["skew_commentary"]
     assert parsed["implied_1d_move_pct"] == 0.85
     assert parsed["implied_5d_move_pct"] == 2.10
+
+
+def test_macro_note_weekday_header_date_parsed() -> None:
+    alt = (
+        Path(__file__).parent / "fixtures" / "private_vendor_samples" / "macro_note_alt_date_fixture.txt"
+    ).read_text(encoding="utf-8")
+    parsed = parse_macro_note_text(alt)
+    assert parsed["report_date"] == "2026-07-09"
+    assert parsed["report_time"] == "8:00 AM ET"
+    assert "Range-bound" in parsed["macro_theme"]
+    assert "Key dates ahead" not in parsed["macro_theme"]
+    assert parsed["macro_note_summary"]
+    assert parsed["call_wall"] == 7600.0
+    assert parsed["put_wall"] == 7300.0
+    assert parsed["parse_confidence"] in {"HIGH", "MEDIUM"}
+
+
+def test_sanitized_lanes_ready_with_alt_date_fixture() -> None:
+    from qops.advisory.private_context_builder import build_sanitized_advisory_context
+
+    alt = (
+        Path(__file__).parent / "fixtures" / "private_vendor_samples" / "macro_note_alt_date_fixture.txt"
+    ).read_text(encoding="utf-8")
+    parsed = parse_macro_note_text(alt)
+    sanitized = build_sanitized_advisory_context(macro_note=parsed)
+    lanes = sanitized["lanes"]
+    assert lanes["macro_context"] in {"READY", "READY_LOW_CONFIDENCE", "PARTIAL"}
+    assert lanes["index_levels_context"] in {"READY", "READY_LOW_CONFIDENCE"}
+    assert sanitized["gate_levels"]["call_wall"] == 7600.0

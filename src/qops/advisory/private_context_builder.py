@@ -28,11 +28,16 @@ def _lane_status(
         return "PARSE_FAILED_NON_BLOCKING"
     confidence = str(parsed.get("parse_confidence", "") or "").upper()
     if not parsed.get("report_date"):
-        return "PARSE_FAILED_NON_BLOCKING"
+        has_gate_levels = any(
+            parsed.get(k) is not None
+            for k in ("call_wall", "put_wall", "zero_gamma_level", "volatility_trigger")
+        )
+        if not has_gate_levels:
+            return "PARSE_FAILED_NON_BLOCKING"
     missing = [f for f in required_fields if not parsed.get(f)]
     if missing:
         return "PARTIAL" if any(parsed.get(f) for f in required_fields) else "PARSE_FAILED_NON_BLOCKING"
-    if confidence == "LOW":
+    if confidence in {"LOW", "MEDIUM"}:
         return "READY_LOW_CONFIDENCE"
     return "READY"
 
