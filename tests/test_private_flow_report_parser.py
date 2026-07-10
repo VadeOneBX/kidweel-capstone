@@ -54,3 +54,35 @@ def test_flow_report_output_marked_proprietary() -> None:
     assert parsed["proprietary"] is True
     assert parsed["private"] is True
     assert parsed["kind"] == "flow_report"
+
+
+def test_flow_report_legacy_section_headers_parsed() -> None:
+    legacy = (
+        Path(__file__).parent
+        / "fixtures"
+        / "private_vendor_samples"
+        / "flow_report_legacy_sections_fixture.txt"
+    ).read_text(encoding="utf-8")
+    parsed = parse_flow_report_text(legacy)
+    assert parsed["report_date"] == "2026-07-09"
+    assert len(parsed["overview_bullets"]) >= 2
+    assert parsed["top_symbols"]
+    assert "AAPL" in parsed["top_symbols"]
+    assert parsed["notable_positions"]
+    assert parsed["parse_confidence"] in {"HIGH", "MEDIUM"}
+    assert "https://" not in str(parsed["algo_flow"])
+
+
+def test_sanitized_flow_lanes_with_legacy_fixture() -> None:
+    from qops.advisory.private_context_builder import build_sanitized_advisory_context
+
+    legacy = (
+        Path(__file__).parent
+        / "fixtures"
+        / "private_vendor_samples"
+        / "flow_report_legacy_sections_fixture.txt"
+    ).read_text(encoding="utf-8")
+    parsed = parse_flow_report_text(legacy)
+    sanitized = build_sanitized_advisory_context(flow_report=parsed)
+    assert sanitized["lanes"]["flow_context"] in {"READY", "READY_LOW_CONFIDENCE", "PARTIAL"}
+    assert sanitized["top_symbols"]
