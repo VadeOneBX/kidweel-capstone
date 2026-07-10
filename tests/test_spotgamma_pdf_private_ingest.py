@@ -59,7 +59,7 @@ def test_output_path_must_be_under_private_parsed(tmp_path: Path) -> None:
 
 
 def test_extract_pdf_text_from_synthetic_pdf(tmp_path: Path) -> None:
-    fixture = Path(__file__).parent / "fixtures" / "sg_pdf_samples" / "founders_note_sample.txt"
+    fixture = Path(__file__).parent / "fixtures" / "sg_pdf_samples" / "fn_sample_fixture.txt"
     text = fixture.read_text(encoding="utf-8")
     pdf_path = tmp_path / "private" / "raw" / "spotgamma" / "founders_note_2026_07_09.pdf"
     _make_text_pdf(pdf_path, text)

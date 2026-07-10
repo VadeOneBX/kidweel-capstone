@@ -1,0 +1,59 @@
+"""Synthetic FlowPatrol text fixture (not proprietary SpotGamma content)."""
+
+FLOWPATROL_FIXTURE_TEXT = """
+FlowPatrol Report
+Report Date: July 9, 2026
+
+Executive Summary
+- Index positioning skewed bullish on delta
+- Single-name flow concentrated in mega-cap tech
+- Volatility demand elevated in semiconductors
+
+Index ETF Positioning Summary
+SPY net delta +$1.2B; QQQ net delta +$850M
+
+Single Stock Positioning Summary
+AAPL and NVDA lead call buying; TSLA mixed
+
+Sector Breakdown
+Technology 42%
+Financials 18%
+Energy 9%
+
+Directional Positioning
+Symbol  Delta($M)  Percentile
+SPY    1200       88
+QQQ    850        82
+
+Gamma Positioning
+Symbol  Gamma($M)  Percentile
+SPY    450        75
+IWM    120        60
+
+Volatility Positioning
+Symbol  Vega($M)  Percentile
+SMH    95        91
+XLE    40        55
+
+Largest Premium Trades
+NVDA 2026-08-15 140C $12.5M
+AAPL 2026-07-18 210C $8.2M
+
+Largest Index Trades
+SPY 2026-07-11 625C $15.0M
+
+Unusual Options Positions
+TSLA 2026-07-18 250P unusual put sweep
+
+Statistically Significant Positions
+AAPL Technology $12.5M, 95th
+NVDA Technology $9.8M, 92nd
+XOM Energy $3.1M, 88th
+
+Sector Statistical Analysis
+Technology avg delta percentile 90
+Energy avg delta percentile 72
+
+Heavy Daytrading/Algo Flow
+SPY 0DTE call spreads dominated opening hour
+"""

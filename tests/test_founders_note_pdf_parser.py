@@ -8,7 +8,7 @@ from qops.advisory.founders_note_parser import parse_founders_note_text
 
 
 def _fixture_text() -> str:
-    return (Path(__file__).parent / "fixtures" / "sg_pdf_samples" / "founders_note_sample.txt").read_text(
+    return (Path(__file__).parent / "fixtures" / "sg_pdf_samples" / "fn_sample_fixture.txt").read_text(
         encoding="utf-8"
     )
 

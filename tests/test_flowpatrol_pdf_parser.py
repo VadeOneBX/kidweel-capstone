@@ -8,7 +8,7 @@ from qops.advisory.flowpatrol_parser import parse_flowpatrol_text
 
 
 def _fixture_text() -> str:
-    return (Path(__file__).parent / "fixtures" / "sg_pdf_samples" / "flowpatrol_sample.txt").read_text(
+    return (Path(__file__).parent / "fixtures" / "sg_pdf_samples" / "fp_sample_fixture.txt").read_text(
         encoding="utf-8"
     )
 

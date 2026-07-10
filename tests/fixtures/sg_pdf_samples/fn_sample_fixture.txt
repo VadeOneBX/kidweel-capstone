@@ -1,0 +1,46 @@
+"""Synthetic Founder Note text fixture (not proprietary SpotGamma content)."""
+
+FOUNDERS_NOTE_FIXTURE_TEXT = """
+Founder's Note
+Report Date: July 9, 2026
+Report Time: 8:00 AM ET
+
+Macro Theme: Range-bound with event risk into CPI
+
+Key Dates:
+- July 10, 2026 CPI
+- July 16, 2026 OpEx
+
+SG Summary: Dealers are long gamma near spot with muted realized vol.
+
+Key SPX Levels
+Resistance: 6280
+Pivot: 6220
+Support: 6180
+
+Founder's Note Summary: Operators should expect chop between walls until CPI clears.
+
+Skew Commentary: Put skew is elevated versus 30-day median.
+
+Reference Prices
+SPX: 6225
+VIX: 14.2
+
+SG Implied 1-Day Move: 0.85%
+SG Implied 5-Day Move: 2.10%
+
+Volatility Trigger: 6180
+Absolute Gamma Strike: 6225
+Call Wall: 6300
+Put Wall: 6150
+Zero Gamma Level: 6225
+Gamma Tilt: Positive
+Gamma Notional: $4.2B
+
+25 Delta Risk Reversal: -2.5
+
+Call Volume: 1,250,000
+Put Volume: 980,000
+Call Open Interest: 8,500,000
+Put Open Interest: 7,100,000
+"""
