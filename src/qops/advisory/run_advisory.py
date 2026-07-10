@@ -16,6 +16,7 @@ from qops.advisory.am_note_gate import (
     build_pre_am_structure_fields,
     run_date_from_run_id,
 )
+from qops.advisory.private_context_builder import load_sanitized_private_context
 from qops.ingest.morning_regime_upgrade import (
     discover_upgraded_morning_regime_workbooks,
     fast_advisory_candidate_to_dict,
@@ -59,7 +60,17 @@ def _macro_posture_label(gate: MacroPaperGate) -> str:
     return gate.paper_gate_macro_status
 
 
-def _morning_macro_context(gate: MacroPaperGate) -> str:
+def _morning_macro_context(gate: MacroPaperGate, private_lanes: dict[str, object] | None = None) -> str:
+    if private_lanes:
+        lane = str(private_lanes.get("macro_context", "") or "")
+        if lane in {
+            "READY",
+            "READY_LOW_CONFIDENCE",
+            "PARTIAL",
+            "MISSING_NON_BLOCKING",
+            "PARSE_FAILED_NON_BLOCKING",
+        }:
+            return lane
     if gate.macro_context_state == "AM_NOTE_CONTEXT_READY":
         return "READY"
     if gate.macro_context_state == "MANUAL_CONTEXT_OVERRIDE":
@@ -83,6 +94,7 @@ def _build_morning_regime_status(
     gate: MacroPaperGate,
     risk_df: pd.DataFrame,
     expressions_df: pd.DataFrame,
+    private_context: dict[str, object] | None = None,
 ) -> dict[str, object]:
     summary = summarize_risk_audit(manifest.risk_audit_artifact or "")
     candidate_count = int(summary.get("total_candidates", 0) or 0)
@@ -178,10 +190,18 @@ def _build_morning_regime_status(
     elif paper_action == "WITHHELD_QUALITY":
         next_action = "No paper action. Quality gate withheld selection."
 
+    private_lanes = {}
+    if private_context and isinstance(private_context.get("lanes"), dict):
+        private_lanes = private_context["lanes"]
+
     return {
         "run_status": manifest.status,
         "woke": True,
-        "macro_context": _morning_macro_context(gate),
+        "macro_context": _morning_macro_context(gate, private_lanes),
+        "flow_context": private_lanes.get("flow_context", "MISSING_NON_BLOCKING"),
+        "skew_context": private_lanes.get("skew_context", "MISSING_NON_BLOCKING"),
+        "vol_context": private_lanes.get("vol_context", "MISSING_NON_BLOCKING"),
+        "index_levels_context": private_lanes.get("index_levels_context", "MISSING_NON_BLOCKING"),
         "hydration": hydration,
         "options_discovery": options_discovery,
         "structure_build": structure_build,
@@ -258,6 +278,8 @@ def build_run_advisory(
     )
 
     session_date = run_date_from_run_id(manifest.run_id)
+    private_context = load_sanitized_private_context(base_dir, run_date=session_date)
+
     staged = staged_files or manifest.staged_files
     flow_intake_payload: dict[str, object] | None = None
     morning_regime_audit_artifact = ""
@@ -317,7 +339,9 @@ def build_run_advisory(
             gate,
             risk_df,
             expressions_df,
+            private_context,
         ),
+        "private_vendor_context": private_context,
         "frontier_review_required_before_paper": frontier.frontier_review_required_before_paper,
         "expression_frontier_summaries": [asdict(s) for s in frontier.symbol_summaries],
         "expression_frontier_rows": frontier.expression_rows,

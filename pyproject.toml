@@ -29,6 +29,9 @@ dependencies = [
     # Excel ingestion (you already depend on this implicitly)
     "openpyxl>=3.1",
 
+    # SpotGamma private PDF ingest (local deterministic extraction)
+    "pymupdf>=1.24",
+
     # QOPS local runtime (REDIS-MOBILE-INFRA-C1)
     "fastapi>=0.115",
     "uvicorn>=0.30",

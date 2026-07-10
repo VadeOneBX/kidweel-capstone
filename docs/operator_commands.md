@@ -130,6 +130,49 @@ find data/runs -type f | sort | tail -n 10
 find data/processed -type f | sort | tail -n 20
 ```
 
+## Private vendor PDF ingest
+
+Private vendor PDFs may be used as local advisory inputs.
+
+Rules:
+
+- Store raw PDFs only under `private/raw/`.
+- Store extracted text only under `private/text/`.
+- Store parsed JSON only under `private/parsed/`.
+- Do not commit raw PDFs, extracted text, or parsed private JSON.
+- Morning Regime consumes sanitized derived context only.
+- Public docs, README, briefs, and PR summaries must not include raw vendor prose, tables, report names, or source-specific field inventories.
+
+Sanitized lanes:
+
+- macro_context
+- flow_context
+- skew_context
+- vol_context
+- index_levels_context
+
+Allowed lane states:
+
+- READY
+- READY_LOW_CONFIDENCE
+- PARTIAL
+- MISSING_NON_BLOCKING
+- PARSE_FAILED_NON_BLOCKING
+
+```bash
+uv run python scripts/parse_private_vendor_pdf.py \
+  --kind macro_note \
+  --pdf private/raw/macro_note_2026_07_09.pdf \
+  --out private/parsed/macro_note_2026_07_09.json
+
+uv run python scripts/parse_private_vendor_pdf.py \
+  --kind flow_report \
+  --pdf private/raw/flow_report_2026_07_09.pdf \
+  --out private/parsed/flow_report_2026_07_09.json
+```
+
+Exit code **2** means text extraction failed (`NEEDS_REVIEW`); use operator review—do not enable OCR in the automated path.
+
 ## Emergency halt
 
 ```bash

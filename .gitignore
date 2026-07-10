@@ -261,3 +261,12 @@ model.joblib
 # Local MCP configs with secrets
 .cursor/mcp.json
 .claude/settings.json
+
+# ---- Private vendor artifacts (PRIVATE-VENDOR-INGEST-REDACTION-C1) ----
+private/
+data/raw/vendor/
+data/parsed/vendor/
+logs/vendor/
+**/*private*vendor*.pdf
+**/*private*vendor*.txt
+**/*private*vendor*.json

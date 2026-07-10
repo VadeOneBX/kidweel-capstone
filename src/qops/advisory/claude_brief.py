@@ -118,7 +118,7 @@ Run ID: `{manifest.run_id}`
 Run status: `{manifest.status}`  
 Mode: `{manifest.mode}`
 
-## Macro context gate (AM Founder note)
+## Macro context gate (private macro note)
 
 {policy_line}
 
@@ -148,6 +148,10 @@ Run advisory JSON: `{run_advisory_result.advisory_json_artifact}`
 
 - woke: `{morning.get("woke", False)}`
 - macro_context: `{morning.get("macro_context", "")}`
+- flow_context: `{morning.get("flow_context", "")}`
+- skew_context: `{morning.get("skew_context", "")}`
+- vol_context: `{morning.get("vol_context", "")}`
+- index_levels_context: `{morning.get("index_levels_context", "")}`
 - hydration: `{morning.get("hydration", "")}`
 - options_discovery: `{morning.get("options_discovery", "")}`
 - structure_build: `{morning.get("structure_build", "")}`
@@ -236,7 +240,7 @@ Attractive is not approved. Selected is not optimal. Rejected is not broken.
 
 ## Advisory
 
-Context incomplete until the AM Founder note is parsed unless manual override is recorded.
+Context incomplete until private macro note context is available unless manual override is recorded.
 Hydration and expression frontier review may continue; paper approval is withheld when required.
 
 The operator reviews the audit artifact paths below.

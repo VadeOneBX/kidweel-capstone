@@ -1,0 +1,27 @@
+"""Synthetic alternate-date macro note fixture (generic; not real vendor content)."""
+
+MACRO_NOTE_ALT_DATE_FIXTURE_TEXT = """
+Daily Macro Note: Thu, July 09, 2026 at 8:00 AM ET
+
+Macro Theme: Range-bound with event risk into CPI
+
+Key dates ahead:
+- July 10, 2026 CPI
+- July 16, 2026 OpEx
+
+Vendor Summary: Dealers are long gamma near spot with muted realized vol.
+
+Macro Note Summary: Operators should expect chop between walls until CPI clears.
+
+Skew Commentary: Put skew is elevated versus 30-day median.
+
+Implied 1-Day Move: 0.66%
+Implied 5-Day Move: 1.62%
+
+Volatility Trigger: 7485
+Call Wall: 7600
+Put Wall: 7300
+Zero Gamma Level: 7450
+
+25 Delta Risk Reversal: -0.048
+"""
