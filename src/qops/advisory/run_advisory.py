@@ -55,22 +55,42 @@ class RunAdvisoryResult(BaseModel):
 def _macro_posture_label(gate: MacroPaperGate) -> str:
     if gate.parsed_note and gate.parsed_note.advisory_bias:
         return gate.parsed_note.advisory_bias
-    if gate.am_note_status != "PARSED":
-        return "context incomplete; paper approval withheld"
+    audit = getattr(gate, "macro_context", None)
+    if audit is not None and getattr(audit, "status", "") in {
+        "MACRO_CONTEXT_UNPARSED_NON_BLOCKING",
+        "MACRO_CONTEXT_MISSING_NON_BLOCKING",
+    }:
+        return "macro context degraded; non-blocking"
+    if gate.am_note_status != "PARSED" and gate.macro_context_state != "MANUAL_CONTEXT_OVERRIDE":
+        return "macro context degraded; non-blocking"
     return gate.paper_gate_macro_status
 
 
+_AUDIT_TO_MORNING_MACRO = {
+    "MACRO_CONTEXT_READY": "READY",
+    "MACRO_CONTEXT_READY_LOW_CONFIDENCE": "READY_LOW_CONFIDENCE",
+    "MACRO_CONTEXT_UNPARSED_NON_BLOCKING": "UNPARSED_NON_BLOCKING",
+    "MACRO_CONTEXT_MISSING_NON_BLOCKING": "MISSING_NON_BLOCKING",
+    "MANUAL_CONTEXT_OVERRIDE": "READY_LOW_CONFIDENCE",
+}
+
+
 def _morning_macro_context(gate: MacroPaperGate, private_lanes: dict[str, object] | None = None) -> str:
+    # Private vendor macro is authoritative when present/usable.
+    # MISSING/PARSE_FAILED fall through so AM-note / workbook prose degrade path can fill the lane.
     if private_lanes:
         lane = str(private_lanes.get("macro_context", "") or "")
         if lane in {
             "READY",
             "READY_LOW_CONFIDENCE",
             "PARTIAL",
-            "MISSING_NON_BLOCKING",
-            "PARSE_FAILED_NON_BLOCKING",
         }:
             return lane
+    audit = getattr(gate, "macro_context", None)
+    if audit is not None:
+        mapped = _AUDIT_TO_MORNING_MACRO.get(str(getattr(audit, "status", "") or ""))
+        if mapped:
+            return mapped
     if gate.macro_context_state == "AM_NOTE_CONTEXT_READY":
         return "READY"
     if gate.macro_context_state == "MANUAL_CONTEXT_OVERRIDE":
@@ -341,6 +361,14 @@ def build_run_advisory(
             expressions_df,
             private_context,
         ),
+        "macro_context_audit": {
+            "status": gate.macro_context.status,
+            "source_type": gate.macro_context.source_type,
+            "parse_status": gate.macro_context.parse_status,
+            "source_file": gate.macro_context.source_file,
+            "warnings": list(gate.macro_context.warnings),
+            "confidence": gate.macro_context.confidence,
+        },
         "private_vendor_context": private_context,
         "frontier_review_required_before_paper": frontier.frontier_review_required_before_paper,
         "expression_frontier_summaries": [asdict(s) for s in frontier.symbol_summaries],

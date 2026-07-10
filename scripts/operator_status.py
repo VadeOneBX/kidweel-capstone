@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -10,7 +11,13 @@ from qops.advisory.subagent_ideas import (
     count_idea_types,
     load_tier3_ideas,
 )
-from qops.runtime.orb_manifest import manifest_path, read_manifest, read_manifest_by_run_id
+from qops.advisory.run_readiness import format_readiness_view
+from qops.runtime.orb_manifest import (
+    OrbRunManifest,
+    manifest_path,
+    read_manifest,
+    read_manifest_by_run_id,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -27,7 +34,47 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Read-only summary of latest post-ORB Tier 3 idea artifacts",
     )
+    parser.add_argument(
+        "--readiness",
+        action="store_true",
+        help="Print upstream morning_regime_status readiness view from run advisory JSON",
+    )
     return parser.parse_args()
+
+
+def _load_run_advisory(base_dir: Path, run_id: str) -> dict[str, object] | None:
+    path = base_dir / "data" / "advisory" / f"{run_id}_run_advisory.json"
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def print_readiness_lanes(base_dir: Path, manifest: OrbRunManifest) -> int:
+    advisory = _load_run_advisory(base_dir, manifest.run_id)
+    if advisory is None:
+        print(f"NO_RUN_ADVISORY_FOUND: data/advisory/{manifest.run_id}_run_advisory.json")
+        return 1
+
+    morning = advisory.get("morning_regime_status")
+    if not isinstance(morning, dict):
+        print("NO_MORNING_REGIME_STATUS: morning_regime_status missing from run advisory")
+        return 1
+
+    audit = advisory.get("macro_context_audit")
+    if not isinstance(audit, dict):
+        audit = None
+
+    payload = format_readiness_view(
+        run_id=manifest.run_id,
+        morning_regime_status=morning,
+        macro_context_audit=audit,
+    )
+    print(json.dumps(payload, indent=2))
+    return 0
 
 
 def _parse_ideas_path(path: Path) -> tuple[str, str, str] | None:
@@ -100,7 +147,10 @@ def main() -> int:
         if not path.exists():
             print(f"NO_MANIFEST_FOUND: {path}")
             return 1
-        print(read_manifest_by_run_id(base_dir, run_date, args.run_id).model_dump_json(indent=2))
+        manifest = read_manifest_by_run_id(base_dir, run_date, args.run_id)
+        if args.readiness:
+            return print_readiness_lanes(base_dir, manifest)
+        print(manifest.model_dump_json(indent=2))
         return 0
 
     path = manifest_path(base_dir, run_date)
@@ -108,7 +158,10 @@ def main() -> int:
         print(f"NO_MANIFEST_FOUND: {path}")
         return 1
 
-    print(read_manifest(base_dir, run_date).model_dump_json(indent=2))
+    manifest = read_manifest(base_dir, run_date)
+    if args.readiness:
+        return print_readiness_lanes(base_dir, manifest)
+    print(manifest.model_dump_json(indent=2))
     return 0
 
 

@@ -1,10 +1,10 @@
-"""AM Founder Note macro context gate (advisory + paper approval withholding)."""
+"""AM Founder Note macro context gate (advisory degradation; non-blocking)."""
 
 from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
@@ -28,7 +28,49 @@ MacroContextState = Literal[
     "MANUAL_CONTEXT_OVERRIDE",
 ]
 
+MacroContextStatus = Literal[
+    "MACRO_CONTEXT_READY",
+    "MACRO_CONTEXT_READY_LOW_CONFIDENCE",
+    "MACRO_CONTEXT_UNPARSED_NON_BLOCKING",
+    "MACRO_CONTEXT_MISSING_NON_BLOCKING",
+    "MANUAL_CONTEXT_OVERRIDE",
+]
+
+MacroParseStatus = Literal[
+    "STRUCTURED_PARSED",
+    "XLSX_FOUNDER_NOTE_PARSED",
+    "AVAILABLE_NOT_PARSED",
+    "MISSING_OPTIONAL_CONTEXT",
+    "NOT_AVAILABLE",
+    "MANUAL_OVERRIDE_PARSED",
+    "STALE",
+]
+
+MacroSourceType = Literal[
+    "manual_macro_context_override",
+    "structured_sidecar",
+    "xlsx_founders_note",
+    "unparsed",
+    "missing",
+]
+
 PAPER_GATE_AM_NOTE_INCOMPLETE = "paper_gate:am_note_context_incomplete"
+
+_XLSX_FOUNDER_FALLBACK_WARNING = (
+    "Founder's Note parsed from workbook prose fallback; "
+    "structured AM-note sidecar not present."
+)
+_MANUAL_OVERRIDE_WARNING = "Manual macro context override used."
+
+_FOUNDER_LABEL_RE = re.compile(
+    r"^\s*(?:founder's\s+note|founders\s+note|founder\s+note|am\s+note|morning\s+note)\s*:?\s*$",
+    re.IGNORECASE,
+)
+_SECTION_STOP_RE = re.compile(
+    r"^\s*(?:what traders should know|executive summary|index etf|sg summary|"
+    r"macro theme|key dates|key sg levels|resistance:|support:|pivot:)\b",
+    re.IGNORECASE,
+)
 
 _AM_NOTE_PARSED_KEYS = frozenset(
     {
@@ -68,6 +110,16 @@ class AmNoteParsed:
 
 
 @dataclass(frozen=True, slots=True)
+class MacroContextAudit:
+    status: MacroContextStatus
+    source_type: MacroSourceType
+    parse_status: MacroParseStatus
+    source_file: str = ""
+    warnings: tuple[str, ...] = ()
+    confidence: str = "LOW"
+
+
+@dataclass(frozen=True, slots=True)
 class MacroPaperGate:
     am_note_status: AmNoteStatus
     macro_context_state: MacroContextState
@@ -79,7 +131,14 @@ class MacroPaperGate:
     am_note_required_before_paper: bool
     parsed_note: AmNoteParsed | None = None
     paper_approval_allowed: bool = False
-
+    macro_context: MacroContextAudit = field(
+        default_factory=lambda: MacroContextAudit(
+            status="MACRO_CONTEXT_MISSING_NON_BLOCKING",
+            source_type="missing",
+            parse_status="MISSING_OPTIONAL_CONTEXT",
+            confidence="LOW",
+        )
+    )
 
 def run_date_from_run_id(run_id: str) -> str:
     match = _RUN_ID_DATE.match(run_id.strip())
@@ -178,6 +237,7 @@ def _parsed_is_complete(parsed: AmNoteParsed) -> bool:
 
 
 def parse_am_note_file(path: Path, *, session_date: str = "") -> AmNoteParsed | None:
+    """Parse structured AM-note sidecar (.json / .csv only). XLSX handled separately."""
     if not path.is_file():
         return None
     suffix = path.suffix.lower()
@@ -218,40 +278,225 @@ def parse_am_note_file(path: Path, *, session_date: str = "") -> AmNoteParsed | 
     return None
 
 
+def _cell_text(value: object) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if text.lower() in {"nan", "none"}:
+        return ""
+    return text
+
+
+def parse_xlsx_founders_note(path: Path, *, session_date: str = "") -> AmNoteParsed | None:
+    """Extract Founder's Note prose from morning_regime.xlsx without inventing bias/posture."""
+    if not path.is_file() or path.suffix.lower() not in {".xlsx", ".xls"}:
+        return None
+    try:
+        xl = pd.ExcelFile(path)
+    except (OSError, ValueError):
+        return None
+
+    sheet_name = None
+    for name in xl.sheet_names:
+        if str(name).strip().lower() == "morning_regime":
+            sheet_name = name
+            break
+    if sheet_name is None:
+        sheet_name = xl.sheet_names[0] if xl.sheet_names else None
+    if sheet_name is None:
+        return None
+
+    try:
+        df = pd.read_excel(path, sheet_name=sheet_name, header=None)
+    except (OSError, ValueError):
+        return None
+    if df.empty:
+        return None
+
+    label_row: int | None = None
+    for idx in range(len(df)):
+        for col in range(df.shape[1]):
+            cell = _cell_text(df.iat[idx, col])
+            if cell and _FOUNDER_LABEL_RE.match(cell):
+                label_row = idx
+                break
+        if label_row is not None:
+            break
+    if label_row is None:
+        return None
+
+    prose_parts: list[str] = []
+    for idx in range(label_row + 1, len(df)):
+        row_texts: list[str] = []
+        for col in range(df.shape[1]):
+            cell = _cell_text(df.iat[idx, col])
+            if cell:
+                row_texts.append(cell)
+        if not row_texts:
+            if prose_parts:
+                break
+            continue
+        joined = " ".join(row_texts)
+        if _SECTION_STOP_RE.match(joined) and prose_parts:
+            break
+        if _FOUNDER_LABEL_RE.match(joined):
+            continue
+        prose_parts.append(joined)
+
+    prose = " ".join(prose_parts).strip()
+    if not prose:
+        return None
+
+    return AmNoteParsed(
+        market_direction_summary=prose,
+        dealer_support_summary="",
+        dealer_risk_summary="",
+        advisory_bias="UNKNOWN",
+        spread_posture="UNKNOWN",
+        note_trade_date=session_date,
+    )
+
+
+def _structured_sidecar_paths(paths: list[Path]) -> list[Path]:
+    return [p for p in paths if p.suffix.lower() in {".json", ".csv"}]
+
+
+def _xlsx_paths(paths: list[Path]) -> list[Path]:
+    return [p for p in paths if p.suffix.lower() in {".xlsx", ".xls"}]
+
+
 def resolve_am_note_status(
     paths: list[Path],
     *,
     session_date: str,
     override: dict[str, object] | None,
 ) -> tuple[AmNoteStatus, AmNoteParsed | None]:
+    """Legacy resolver retained for tests; prefer resolve_macro_context_resolution."""
+    resolution = resolve_macro_context_resolution(
+        paths,
+        session_date=session_date,
+        override=override,
+        override_path=None,
+    )
+    return resolution.am_note_status, resolution.parsed_note
+
+
+@dataclass(frozen=True, slots=True)
+class MacroContextResolution:
+    am_note_status: AmNoteStatus
+    parsed_note: AmNoteParsed | None
+    macro_context: MacroContextAudit
+
+
+def resolve_macro_context_resolution(
+    paths: list[Path],
+    *,
+    session_date: str,
+    override: dict[str, object] | None,
+    override_path: Path | None,
+) -> MacroContextResolution:
+    """Priority: manual override → structured sidecar → XLSX Founder's Note → degrade."""
     if override:
         status_raw = str(override.get("am_note_status", "") or "").strip().upper()
         if status_raw == "MANUAL_OVERRIDE" or bool(override.get("manual_override")):
             parsed = None
             if override.get("parsed_note") and isinstance(override["parsed_note"], dict):
                 parsed = _row_to_parsed(override["parsed_note"], trade_date=session_date)
-            return "MANUAL_OVERRIDE", parsed
+            source = str(override_path) if override_path is not None else ""
+            return MacroContextResolution(
+                am_note_status="MANUAL_OVERRIDE",
+                parsed_note=parsed,
+                macro_context=MacroContextAudit(
+                    status="MANUAL_CONTEXT_OVERRIDE",
+                    source_type="manual_macro_context_override",
+                    parse_status="MANUAL_OVERRIDE_PARSED",
+                    source_file=source,
+                    warnings=(_MANUAL_OVERRIDE_WARNING,),
+                    confidence="HIGH",
+                ),
+            )
 
-    if not paths:
-        return "NOT_AVAILABLE", None
-
-    parsed_candidates: list[AmNoteParsed] = []
-    for path in paths:
+    structured = _structured_sidecar_paths(paths)
+    for path in structured:
         parsed = parse_am_note_file(path, session_date=session_date)
-        if parsed is not None:
-            parsed_candidates.append(parsed)
+        if parsed is None:
+            continue
+        if not _parsed_is_complete(parsed):
+            continue
+        note_date = (parsed.note_trade_date or session_date).strip()
+        if session_date and note_date and note_date < session_date:
+            return MacroContextResolution(
+                am_note_status="STALE",
+                parsed_note=parsed,
+                macro_context=MacroContextAudit(
+                    status="MACRO_CONTEXT_READY_LOW_CONFIDENCE",
+                    source_type="structured_sidecar",
+                    parse_status="STALE",
+                    source_file=str(path),
+                    warnings=("Structured AM-note sidecar is stale relative to session date.",),
+                    confidence="MEDIUM",
+                ),
+            )
+        return MacroContextResolution(
+            am_note_status="PARSED",
+            parsed_note=parsed,
+            macro_context=MacroContextAudit(
+                status="MACRO_CONTEXT_READY",
+                source_type="structured_sidecar",
+                parse_status="STRUCTURED_PARSED",
+                source_file=str(path),
+                warnings=(),
+                confidence="HIGH",
+            ),
+        )
 
-    if not parsed_candidates:
-        return "AVAILABLE_NOT_PARSED", None
+    xlsx_candidates = _xlsx_paths(paths)
+    for path in xlsx_candidates:
+        parsed = parse_xlsx_founders_note(path, session_date=session_date)
+        if parsed is None:
+            continue
+        return MacroContextResolution(
+            am_note_status="PARSED",
+            parsed_note=parsed,
+            macro_context=MacroContextAudit(
+                status="MACRO_CONTEXT_READY_LOW_CONFIDENCE",
+                source_type="xlsx_founders_note",
+                parse_status="XLSX_FOUNDER_NOTE_PARSED",
+                source_file=str(path),
+                warnings=(_XLSX_FOUNDER_FALLBACK_WARNING,),
+                confidence="LOW",
+            ),
+        )
 
-    parsed = parsed_candidates[0]
-    if not _parsed_is_complete(parsed):
-        return "AVAILABLE_NOT_PARSED", parsed
+    if paths:
+        return MacroContextResolution(
+            am_note_status="AVAILABLE_NOT_PARSED",
+            parsed_note=None,
+            macro_context=MacroContextAudit(
+                status="MACRO_CONTEXT_UNPARSED_NON_BLOCKING",
+                source_type="unparsed",
+                parse_status="AVAILABLE_NOT_PARSED",
+                source_file=str(paths[0]),
+                warnings=(
+                    "Morning regime present but Founder's Note / AM-note context unparsed; "
+                    "non-blocking degradation.",
+                ),
+                confidence="LOW",
+            ),
+        )
 
-    note_date = (parsed.note_trade_date or session_date).strip()
-    if session_date and note_date and note_date < session_date:
-        return "STALE", parsed
-    return "PARSED", parsed
+    return MacroContextResolution(
+        am_note_status="NOT_AVAILABLE",
+        parsed_note=None,
+        macro_context=MacroContextAudit(
+            status="MACRO_CONTEXT_MISSING_NON_BLOCKING",
+            source_type="missing",
+            parse_status="MISSING_OPTIONAL_CONTEXT",
+            source_file="",
+            warnings=("Optional AM Founder's Note context missing; non-blocking degradation.",),
+            confidence="LOW",
+        ),
+    )
 
 
 def resolve_macro_context_state(
@@ -269,6 +514,7 @@ def resolve_macro_context_state(
         return "AM_NOTE_STALE_REVIEW_REQUIRED"
     if am_note_status == "PARSED":
         return "AM_NOTE_CONTEXT_READY"
+    # Degraded / missing remain advisory-only; legacy state kept for display compatibility.
     return "PRE_AM_NOTE_CONTEXT_INCOMPLETE"
 
 
@@ -276,11 +522,9 @@ def paper_approval_allowed_for_macro(
     am_note_status: AmNoteStatus,
     macro_context_state: MacroContextState,
 ) -> bool:
-    if macro_context_state == "MANUAL_CONTEXT_OVERRIDE":
-        return True
-    if am_note_status == "MANUAL_OVERRIDE":
-        return True
-    return am_note_status == "PARSED" and macro_context_state == "AM_NOTE_CONTEXT_READY"
+    """AM-note gaps are non-blocking (MORNING-REGIME-DEGRADE-NOT-BLOCK-C1)."""
+    del am_note_status, macro_context_state
+    return True
 
 
 def _summaries_from_parsed(parsed: AmNoteParsed | None) -> tuple[str, str, str, str]:
@@ -317,52 +561,72 @@ def build_macro_paper_gate(
     staged_files: list[str] | None = None,
 ) -> MacroPaperGate:
     session_date = run_date_from_run_id(run_id)
+    override_path = macro_context_override_path(base_dir, run_id)
     override = _load_override(base_dir, run_id)
     paths = discover_morning_regime_paths(
         base_dir,
         run_date=session_date,
         staged_files=staged_files,
     )
-    am_status, parsed = resolve_am_note_status(
+    resolution = resolve_macro_context_resolution(
         paths,
         session_date=session_date,
         override=override,
+        override_path=override_path if override is not None else None,
     )
+    am_status = resolution.am_note_status
+    parsed = resolution.parsed_note
+    audit = resolution.macro_context
     macro_state = resolve_macro_context_state(am_status, override=override)
     allowed = paper_approval_allowed_for_macro(am_status, macro_state)
 
-    macro_summary, dealer_summary, catalyst_summary, spread_posture = _summaries_from_parsed(parsed)
+    macro_summary, dealer_summary, catalyst_summary, spread_posture = _summaries_from_parsed(
+        parsed
+    )
 
-    if macro_state == "MANUAL_CONTEXT_OVERRIDE":
+    if audit.status == "MANUAL_CONTEXT_OVERRIDE":
         paper_gate_status = "manual_macro_context_override"
         macro_context_summary = macro_summary or "Operator recorded manual macro context override."
-    elif am_status == "PARSED":
+    elif audit.parse_status == "STRUCTURED_PARSED":
         paper_gate_status = "am_note_context_ready"
         bias = parsed.advisory_bias if parsed else ""
         macro_context_summary = (
-            f"AM note parsed. Macro posture is {bias or 'reviewed'}. "
+            f"AM note parsed. Macro posture is {bias or 'reviewed'}. {macro_summary}"
+        ).strip()
+    elif audit.parse_status == "XLSX_FOUNDER_NOTE_PARSED":
+        paper_gate_status = "am_note_xlsx_founder_fallback"
+        macro_context_summary = (
+            "Founder's Note prose parsed from morning_regime.xlsx at low confidence. "
             f"{macro_summary}"
         ).strip()
-    elif am_status == "STALE":
+    elif audit.parse_status == "STALE":
         paper_gate_status = "am_note_stale_review_required"
         macro_context_summary = (
-            "AM note is stale relative to session date; review required before paper approval."
+            "AM note is stale relative to session date; advisory confidence reduced "
+            "(non-blocking)."
         )
-    elif am_status == "AVAILABLE_NOT_PARSED":
-        paper_gate_status = "am_note_present_unparsed"
+    elif audit.status == "MACRO_CONTEXT_UNPARSED_NON_BLOCKING":
+        paper_gate_status = "am_note_present_unparsed_non_blocking"
         macro_context_summary = (
-            "Context incomplete. Hydration is allowed, but paper approval waits for AM note review."
+            "Founder's Note / AM-note context unparsed; morning loop continues with "
+            "degraded macro confidence."
         )
     else:
-        paper_gate_status = "am_note_missing"
+        paper_gate_status = "am_note_missing_non_blocking"
         macro_context_summary = (
-            "Context incomplete. Hydration is allowed, but paper approval waits for AM note review."
+            "Optional AM Founder's Note context missing; morning loop continues with "
+            "degraded macro confidence."
         )
 
-    if not spread_posture and am_status != "PARSED":
-        spread_posture = (
-            "retain candidates; withhold paper approval until AM Founder note is parsed"
-        )
+    if not spread_posture:
+        if audit.parse_status == "XLSX_FOUNDER_NOTE_PARSED":
+            spread_posture = "UNKNOWN"
+        elif audit.parse_status in {"STRUCTURED_PARSED", "MANUAL_OVERRIDE_PARSED"}:
+            spread_posture = ""
+        else:
+            spread_posture = (
+                "retain candidates; macro context degraded (Founder's Note optional)"
+            )
 
     return MacroPaperGate(
         am_note_status=am_status,
@@ -372,9 +636,10 @@ def build_macro_paper_gate(
         dealer_positioning_summary=dealer_summary,
         macro_catalyst_summary=catalyst_summary,
         spread_posture=spread_posture,
-        am_note_required_before_paper=not allowed,
+        am_note_required_before_paper=False,
         parsed_note=parsed,
         paper_approval_allowed=allowed,
+        macro_context=audit,
     )
 
 
@@ -382,18 +647,9 @@ def apply_am_note_paper_gate_to_audit(
     audit_df: pd.DataFrame,
     gate: MacroPaperGate,
 ) -> pd.DataFrame:
-    if audit_df.empty or gate.paper_approval_allowed:
-        return audit_df
-
-    out = audit_df.copy()
-    for idx, row in out.iterrows():
-        approval = str(row.get("paper_approval_status", "") or "").strip()
-        classification = str(row.get("classification", "") or "").strip()
-        if approval == "APPROVED_FOR_PAPER_REVIEW" or classification == "APPROVED_PAPER":
-            out.at[idx, "paper_approval_status"] = "WITHHELD_PENDING_AM_NOTE"
-            out.at[idx, "classification"] = "PAPER_GATE_WITHHELD"
-            out.at[idx, "reject_reason"] = PAPER_GATE_AM_NOTE_INCOMPLETE
-    return out
+    """AM-note incompleteness no longer withholds paper approval (degrade-not-block)."""
+    del gate
+    return audit_df
 
 
 @dataclass(frozen=True, slots=True)
@@ -528,13 +784,13 @@ def build_pre_am_structure_fields(context_df: pd.DataFrame) -> PreAmStructureFie
         iv_rv_state = "IV_ABOVE_RV" if float(iv) > float(rv) else "IV_AT_OR_BELOW_RV"
 
     summary = (
-        "Pre-AM note structure is defensive. Gamma regime appears unstable, and the advisory "
-        "should wait for the Founder's Note before promoting directional bull call spreads. "
-        "Candidates may be hydrated, but approvals should remain withheld."
+        "Pre-AM note structure is defensive. Gamma regime appears unstable; treat directional "
+        "bull call spreads with caution while macro confidence is degraded. Candidates may "
+        "proceed with advisory warnings."
         if negative or gamma_label in {"NEGATIVE_GAMMA_UNSTABLE", "TRANSITIONAL_GAMMA"}
         else (
-            "Pre-AM note structure is mixed; retain candidates and wait for AM Founder note "
-            "before paper approval."
+            "Pre-AM note structure is mixed; retain candidates and treat Founder's Note prose "
+            "as optional low-confidence macro enrichment."
         )
     )
 
