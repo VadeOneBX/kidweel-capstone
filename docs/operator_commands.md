@@ -130,6 +130,35 @@ find data/runs -type f | sort | tail -n 10
 find data/processed -type f | sort | tail -n 20
 ```
 
+## Private SpotGamma PDF ingest
+
+Founder's Note and FlowPatrol PDFs, extracted text, and raw parsed JSON are **proprietary private artifacts**. Store and parse them only under `private/`; never commit PDFs, extracted text, or raw parsed JSON.
+
+Rules:
+
+- Store PDFs under `private/raw/spotgamma/`
+- Run the parser CLI (writes extracted text to `private/text/spotgamma/` and JSON to `private/parsed/spotgamma/`)
+- Review private parsed JSON locally
+- Morning Regime consumes **sanitized** private context only (lane status, gate levels, operator-safe summary)
+- Do not commit PDFs, extracted text, or raw parsed JSON
+- Do not paste proprietary SpotGamma prose into README, docs, or Claude briefs
+
+```bash
+# Founder Note (example date stem)
+uv run python scripts/parse_spotgamma_pdf.py \
+  --kind founders_note \
+  --pdf private/raw/spotgamma/founders_note_2026_07_09.pdf \
+  --out private/parsed/spotgamma/founders_note_2026_07_09.json
+
+# FlowPatrol (example date stem)
+uv run python scripts/parse_spotgamma_pdf.py \
+  --kind flowpatrol \
+  --pdf private/raw/spotgamma/flowpatrol_2026_07_09.pdf \
+  --out private/parsed/spotgamma/flowpatrol_2026_07_09.json
+```
+
+Exit code **2** means text extraction failed (`NEEDS_REVIEW`); use operator review—do not enable OCR in the automated path.
+
 ## Emergency halt
 
 ```bash

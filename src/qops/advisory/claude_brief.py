@@ -148,6 +148,10 @@ Run advisory JSON: `{run_advisory_result.advisory_json_artifact}`
 
 - woke: `{morning.get("woke", False)}`
 - macro_context: `{morning.get("macro_context", "")}`
+- flow_context: `{morning.get("flow_context", "")}`
+- skew_context: `{morning.get("skew_context", "")}`
+- vol_context: `{morning.get("vol_context", "")}`
+- index_levels_context: `{morning.get("index_levels_context", "")}`
 - hydration: `{morning.get("hydration", "")}`
 - options_discovery: `{morning.get("options_discovery", "")}`
 - structure_build: `{morning.get("structure_build", "")}`

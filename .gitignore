@@ -261,3 +261,16 @@ model.joblib
 # Local MCP configs with secrets
 .cursor/mcp.json
 .claude/settings.json
+
+# ---- SpotGamma private proprietary artifacts (SPOTGAMMA-PDF-PRIVATE-INGEST-C1) ----
+private/
+**/*founder*note*.pdf
+**/*founder*note*.txt
+**/*flowpatrol*.pdf
+**/*flowpatrol*.txt
+**/*spotgamma*.pdf
+**/*spotgamma*.txt
+**/*spotgamma*.json
+data/raw/spotgamma/
+data/parsed/spotgamma/
+logs/spotgamma/
