@@ -1,4 +1,4 @@
-"""Parse Founder Note text extracted from private SpotGamma PDFs."""
+"""Parse private macro note text extracted from vendor PDFs."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ _RISK_REVERSAL = re.compile(
     re.IGNORECASE,
 )
 _PERCENT_MOVE = re.compile(
-    r"SG\s+Implied\s+(\d)-Day\s+Move:\s*([\d.]+%?)",
+    r"Implied\s+(\d)-Day\s+Move:\s*([\d.]+%?)",
     re.IGNORECASE,
 )
 
@@ -83,7 +83,7 @@ def _level_from_labels(labels: dict[str, str], *keys: str) -> float | None:
     return None
 
 
-def parse_founders_note_text(text: str) -> dict[str, Any]:
+def parse_macro_note_text(text: str) -> dict[str, Any]:
     labels = _labeled_values(text)
 
     report_date = ""
@@ -97,10 +97,10 @@ def parse_founders_note_text(text: str) -> dict[str, Any]:
         if iso and iso not in key_dates:
             key_dates.append(iso)
 
-    spx_levels = {
-        "resistance": _level_from_labels(labels, "resistance", "spx resistance"),
-        "pivot": _level_from_labels(labels, "pivot", "spx pivot"),
-        "support": _level_from_labels(labels, "support", "spx support"),
+    index_levels = {
+        "resistance": _level_from_labels(labels, "resistance", "index resistance"),
+        "pivot": _level_from_labels(labels, "pivot", "index pivot"),
+        "support": _level_from_labels(labels, "support", "index support"),
     }
 
     implied_moves: dict[int, float | None] = {1: None, 5: None}
@@ -132,20 +132,20 @@ def parse_founders_note_text(text: str) -> dict[str, Any]:
         ref_prices[sym.upper()] = None if num is None else float(num)
 
     return {
-        "kind": "founders_note",
+        "kind": "macro_note",
         "proprietary": True,
         "private": True,
         "report_date": report_date,
         "report_time": _first_match(_REPORT_TIME, text),
         "macro_theme": labels.get("macro theme", ""),
         "key_dates": key_dates,
-        "sg_summary": labels.get("sg summary", ""),
-        "key_spx_levels": spx_levels,
-        "founders_note_summary": labels.get("founder's note summary", labels.get("founders note summary", "")),
+        "source_summary": labels.get("vendor summary", labels.get("source summary", "")),
+        "index_levels": index_levels,
+        "macro_note_summary": labels.get("macro note summary", ""),
         "skew_commentary": labels.get("skew commentary", ""),
         "reference_prices": ref_prices,
-        "sg_implied_1d_move_pct": implied_moves.get(1),
-        "sg_implied_5d_move_pct": implied_moves.get(5),
+        "implied_1d_move_pct": implied_moves.get(1),
+        "implied_5d_move_pct": implied_moves.get(5),
         "volatility_trigger": _level_from_labels(labels, "volatility trigger", "vol trigger"),
         "absolute_gamma_strike": _level_from_labels(labels, "absolute gamma strike"),
         "call_wall": _level_from_labels(labels, "call wall"),
@@ -158,5 +158,5 @@ def parse_founders_note_text(text: str) -> dict[str, Any]:
         "put_volume": None if put_vol is None else float(put_vol),
         "call_open_interest": None if call_oi is None else float(call_oi),
         "put_open_interest": None if put_oi is None else float(put_oi),
-        "parse_confidence": "HIGH" if report_date and spx_levels["resistance"] else "LOW",
+        "parse_confidence": "HIGH" if report_date and index_levels["resistance"] else "LOW",
     }

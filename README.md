@@ -42,10 +42,10 @@ Supporting layers (Claude briefs, subagent skills, ML-style advisory flags) help
 
 | Source | Role in repo | Authority |
 |--------|----------------|-----------|
-| **SpotGamma exports** | Dealer positioning, volatility regime, walls, and directional constraints before spread economics | **Context only**—feeds ingestion and normalization; not a trade signal |
+| **Operator context exports** | Dealer positioning, volatility regime, walls, and directional constraints before spread economics | **Context only**—feeds ingestion and normalization; not a trade signal |
 | **SPY backdrop context** | Regime label for morning replay hydration (when present) | Joined in risk guard; absent backdrop is advisory, not a silent upgrade |
 | **Alpaca market data / greeks staging** | Option chain quotes, greeks staging, hydration expressions | **Infrastructure / reference**—Alpaca is used as a broker/data integration and options workflow reference point. It is not treated as a trading brain or discretionary signal source |
-| **Operator-staged files** | `data/spotgamma/inbox`, dated raw session folders | Intake contract enforced at wake; rejects are logged on the manifest |
+| **Operator-staged files** | Configured inbox paths under `data/`, dated raw session folders | Intake contract enforced at wake; rejects are logged on the manifest |
 
 ---
 
@@ -54,7 +54,7 @@ Supporting layers (Claude briefs, subagent skills, ML-style advisory flags) help
 Canonical path (implemented modules and scripts; not every stage runs in every entrypoint):
 
 ```text
-SpotGamma ingestion
+Context ingestion
   → context derivation (normalize / feature corpus)
   → symbol screening & replay rows (playbook / structure bias)
   → dealer direction scoring & tier gate (expression ranking)

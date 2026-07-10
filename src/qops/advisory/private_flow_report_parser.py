@@ -1,4 +1,4 @@
-"""Parse FlowPatrol text extracted from private SpotGamma PDFs."""
+"""Parse private flow report text extracted from vendor PDFs."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ _REPORT_DATE = re.compile(
     r"Report\s+Date:\s*([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})",
     re.IGNORECASE,
 )
-_STAT_SIG_ROW = re.compile(
+_NOTABLE_ROW = re.compile(
     r"^([A-Z][A-Z0-9.]{0,5})\s+([A-Za-z][A-Za-z\s/&-]+?)\s+\$?([\d.]+)M,\s*(\d+)(?:st|nd|rd|th)?\s*$",
     re.MULTILINE,
 )
@@ -20,19 +20,19 @@ _SECTOR_STAT = re.compile(
     re.MULTILINE | re.IGNORECASE,
 )
 _SECTION_HEADERS = (
-    "Executive Summary",
-    "Index ETF Positioning Summary",
-    "Single Stock Positioning Summary",
-    "Sector Breakdown",
-    "Directional Positioning",
-    "Gamma Positioning",
-    "Volatility Positioning",
-    "Largest Premium Trades",
-    "Largest Index Trades",
-    "Unusual Options Positions",
-    "Statistically Significant Positions",
-    "Sector Statistical Analysis",
-    "Heavy Daytrading/Algo Flow",
+    "Overview",
+    "Index Positioning Summary",
+    "Stock Positioning Summary",
+    "Sector Mix",
+    "Directional Table",
+    "Gamma Table",
+    "Volatility Table",
+    "Large Trades",
+    "Index Trades",
+    "Unusual Positions",
+    "Notable Positions",
+    "Sector Stats",
+    "Algo Flow",
 )
 
 _MONTHS = {
@@ -133,19 +133,19 @@ def _parse_trade_lines(block: str) -> list[str]:
     return [ln.strip() for ln in block.splitlines() if ln.strip()]
 
 
-def parse_flowpatrol_text(text: str) -> dict[str, Any]:
+def parse_flow_report_text(text: str) -> dict[str, Any]:
     report_date = ""
     date_match = _REPORT_DATE.search(text)
     if date_match:
         report_date = _month_to_iso(date_match.group(1), date_match.group(2), date_match.group(3))
 
-    exec_block = _section_text(text, "Executive Summary")
-    stat_sig_rows: list[dict[str, object]] = []
-    for match in _STAT_SIG_ROW.finditer(text):
+    overview_block = _section_text(text, "Overview")
+    notable_rows: list[dict[str, object]] = []
+    for match in _NOTABLE_ROW.finditer(text):
         symbol = parse_symbol(match.group(1))
         if not symbol:
             continue
-        stat_sig_rows.append(
+        notable_rows.append(
             {
                 "symbol": symbol,
                 "sector": match.group(2).strip(),
@@ -155,7 +155,7 @@ def parse_flowpatrol_text(text: str) -> dict[str, Any]:
         )
 
     sector_stats: list[dict[str, object]] = []
-    sector_block = _section_text(text, "Sector Statistical Analysis")
+    sector_block = _section_text(text, "Sector Stats")
     search_text = sector_block or text
     for match in _SECTOR_STAT.finditer(search_text):
         sector_stats.append(
@@ -166,35 +166,29 @@ def parse_flowpatrol_text(text: str) -> dict[str, Any]:
         )
 
     top_symbols: list[str] = []
-    for row in stat_sig_rows:
+    for row in notable_rows:
         sym = str(row["symbol"])
         if sym not in top_symbols:
             top_symbols.append(sym)
 
-    directional = _parse_positioning_table(_section_text(text, "Directional Positioning"))
-    gamma = _parse_positioning_table(_section_text(text, "Gamma Positioning"))
-    volatility = _parse_positioning_table(_section_text(text, "Volatility Positioning"))
-
     return {
-        "kind": "flowpatrol",
+        "kind": "flow_report",
         "proprietary": True,
         "private": True,
         "report_date": report_date,
-        "executive_summary_bullets": _parse_bullets(exec_block),
-        "index_etf_positioning_summary": _section_text(text, "Index ETF Positioning Summary"),
-        "single_stock_positioning_summary": _section_text(text, "Single Stock Positioning Summary"),
-        "sector_breakdown": _parse_sector_breakdown(_section_text(text, "Sector Breakdown")),
-        "directional_positioning_table": directional,
-        "gamma_positioning_table": gamma,
-        "volatility_positioning_table": volatility,
-        "largest_premium_trades": _parse_trade_lines(_section_text(text, "Largest Premium Trades")),
-        "largest_index_trades": _parse_trade_lines(_section_text(text, "Largest Index Trades")),
-        "unusual_options_positions": _parse_trade_lines(
-            _section_text(text, "Unusual Options Positions")
-        ),
-        "statistically_significant_positions": stat_sig_rows,
-        "sector_statistical_analysis": sector_stats,
-        "heavy_daytrading_algo_flow": _section_text(text, "Heavy Daytrading/Algo Flow"),
+        "overview_bullets": _parse_bullets(overview_block),
+        "index_positioning_summary": _section_text(text, "Index Positioning Summary"),
+        "stock_positioning_summary": _section_text(text, "Stock Positioning Summary"),
+        "sector_mix": _parse_sector_breakdown(_section_text(text, "Sector Mix")),
+        "directional_table": _parse_positioning_table(_section_text(text, "Directional Table")),
+        "gamma_table": _parse_positioning_table(_section_text(text, "Gamma Table")),
+        "volatility_table": _parse_positioning_table(_section_text(text, "Volatility Table")),
+        "large_trades": _parse_trade_lines(_section_text(text, "Large Trades")),
+        "index_trades": _parse_trade_lines(_section_text(text, "Index Trades")),
+        "unusual_positions": _parse_trade_lines(_section_text(text, "Unusual Positions")),
+        "notable_positions": notable_rows,
+        "sector_stats": sector_stats,
+        "algo_flow": _section_text(text, "Algo Flow"),
         "top_symbols": top_symbols[:10],
-        "parse_confidence": "HIGH" if report_date and stat_sig_rows else "LOW",
+        "parse_confidence": "HIGH" if report_date and notable_rows else "LOW",
     }

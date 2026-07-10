@@ -341,7 +341,7 @@ def build_run_advisory(
             expressions_df,
             private_context,
         ),
-        "spotgamma_private_context": private_context,
+        "private_vendor_context": private_context,
         "frontier_review_required_before_paper": frontier.frontier_review_required_before_paper,
         "expression_frontier_summaries": [asdict(s) for s in frontier.symbol_summaries],
         "expression_frontier_rows": frontier.expression_rows,

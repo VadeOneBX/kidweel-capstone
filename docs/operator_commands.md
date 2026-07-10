@@ -130,31 +130,45 @@ find data/runs -type f | sort | tail -n 10
 find data/processed -type f | sort | tail -n 20
 ```
 
-## Private SpotGamma PDF ingest
+## Private vendor PDF ingest
 
-Founder's Note and FlowPatrol PDFs, extracted text, and raw parsed JSON are **proprietary private artifacts**. Store and parse them only under `private/`; never commit PDFs, extracted text, or raw parsed JSON.
+Private vendor PDFs may be used as local advisory inputs.
 
 Rules:
 
-- Store PDFs under `private/raw/spotgamma/`
-- Run the parser CLI (writes extracted text to `private/text/spotgamma/` and JSON to `private/parsed/spotgamma/`)
-- Review private parsed JSON locally
-- Morning Regime consumes **sanitized** private context only (lane status, gate levels, operator-safe summary)
-- Do not commit PDFs, extracted text, or raw parsed JSON
-- Do not paste proprietary SpotGamma prose into README, docs, or Claude briefs
+- Store raw PDFs only under `private/raw/`.
+- Store extracted text only under `private/text/`.
+- Store parsed JSON only under `private/parsed/`.
+- Do not commit raw PDFs, extracted text, or parsed private JSON.
+- Morning Regime consumes sanitized derived context only.
+- Public docs, README, briefs, and PR summaries must not include raw vendor prose, tables, report names, or source-specific field inventories.
+
+Sanitized lanes:
+
+- macro_context
+- flow_context
+- skew_context
+- vol_context
+- index_levels_context
+
+Allowed lane states:
+
+- READY
+- READY_LOW_CONFIDENCE
+- PARTIAL
+- MISSING_NON_BLOCKING
+- PARSE_FAILED_NON_BLOCKING
 
 ```bash
-# Founder Note (example date stem)
-uv run python scripts/parse_spotgamma_pdf.py \
-  --kind founders_note \
-  --pdf private/raw/spotgamma/founders_note_2026_07_09.pdf \
-  --out private/parsed/spotgamma/founders_note_2026_07_09.json
+uv run python scripts/parse_private_vendor_pdf.py \
+  --kind macro_note \
+  --pdf private/raw/macro_note_2026_07_09.pdf \
+  --out private/parsed/macro_note_2026_07_09.json
 
-# FlowPatrol (example date stem)
-uv run python scripts/parse_spotgamma_pdf.py \
-  --kind flowpatrol \
-  --pdf private/raw/spotgamma/flowpatrol_2026_07_09.pdf \
-  --out private/parsed/spotgamma/flowpatrol_2026_07_09.json
+uv run python scripts/parse_private_vendor_pdf.py \
+  --kind flow_report \
+  --pdf private/raw/flow_report_2026_07_09.pdf \
+  --out private/parsed/flow_report_2026_07_09.json
 ```
 
 Exit code **2** means text extraction failed (`NEEDS_REVIEW`); use operator review—do not enable OCR in the automated path.

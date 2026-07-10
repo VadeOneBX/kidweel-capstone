@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI for private SpotGamma PDF ingest (Founder's Note and FlowPatrol)."""
+"""CLI for private vendor PDF ingest."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ import argparse
 import sys
 from pathlib import Path
 
-from qops.advisory.flowpatrol_parser import parse_flowpatrol_text
-from qops.advisory.founders_note_parser import parse_founders_note_text
-from qops.advisory.spotgamma_pdf_ingest import (
+from qops.advisory.private_flow_report_parser import parse_flow_report_text
+from qops.advisory.private_macro_note_parser import parse_macro_note_text
+from qops.advisory.private_vendor_pdf_ingest import (
     extract_pdf_text,
     save_extracted_text,
     stem_from_pdf_path,
@@ -18,12 +18,12 @@ from qops.advisory.spotgamma_pdf_ingest import (
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Parse private SpotGamma PDF artifacts.")
+    parser = argparse.ArgumentParser(description="Parse private vendor PDF artifacts.")
     parser.add_argument(
         "--kind",
         required=True,
-        choices=("founders_note", "flowpatrol"),
-        help="PDF artifact kind",
+        choices=("macro_note", "flow_report"),
+        help="Private artifact kind",
     )
     parser.add_argument("--pdf", required=True, type=Path, help="Path to private raw PDF")
     parser.add_argument("--out", required=True, type=Path, help="Path to private parsed JSON output")
@@ -56,10 +56,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"NEEDS_REVIEW: no extractable text in {args.pdf}", file=sys.stderr)
         return 2
 
-    if args.kind == "founders_note":
-        payload = parse_founders_note_text(extraction.text)
+    if args.kind == "macro_note":
+        payload = parse_macro_note_text(extraction.text)
     else:
-        payload = parse_flowpatrol_text(extraction.text)
+        payload = parse_flow_report_text(extraction.text)
 
     out_path = write_parsed_json(payload, args.out, base_dir=base_dir)
     print(f"Wrote {out_path}")

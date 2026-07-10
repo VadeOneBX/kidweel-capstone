@@ -1,7 +1,7 @@
-"""Synthetic Founder Note text fixture (not proprietary SpotGamma content)."""
+"""Synthetic private macro note fixture (generic; not real vendor content)."""
 
-FOUNDERS_NOTE_FIXTURE_TEXT = """
-Founder's Note
+MACRO_NOTE_FIXTURE_TEXT = """
+Private Macro Note
 Report Date: July 9, 2026
 Report Time: 8:00 AM ET
 
@@ -11,14 +11,14 @@ Key Dates:
 - July 10, 2026 CPI
 - July 16, 2026 OpEx
 
-SG Summary: Dealers are long gamma near spot with muted realized vol.
+Vendor Summary: Dealers are long gamma near spot with muted realized vol.
 
-Key SPX Levels
+Key Index Levels
 Resistance: 6280
 Pivot: 6220
 Support: 6180
 
-Founder's Note Summary: Operators should expect chop between walls until CPI clears.
+Macro Note Summary: Operators should expect chop between walls until CPI clears.
 
 Skew Commentary: Put skew is elevated versus 30-day median.
 
@@ -26,8 +26,8 @@ Reference Prices
 SPX: 6225
 VIX: 14.2
 
-SG Implied 1-Day Move: 0.85%
-SG Implied 5-Day Move: 2.10%
+Implied 1-Day Move: 0.85%
+Implied 5-Day Move: 2.10%
 
 Volatility Trigger: 6180
 Absolute Gamma Strike: 6225

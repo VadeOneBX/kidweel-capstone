@@ -1,4 +1,4 @@
-"""Deterministic local PDF text extraction for private SpotGamma artifacts."""
+"""Deterministic local PDF text extraction for private vendor artifacts."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-PRIVATE_RAW_ROOT = Path("private/raw/spotgamma")
-PRIVATE_TEXT_ROOT = Path("private/text/spotgamma")
-PRIVATE_PARSED_ROOT = Path("private/parsed/spotgamma")
+PRIVATE_RAW_ROOT = Path("private/raw")
+PRIVATE_TEXT_ROOT = Path("private/text")
+PRIVATE_PARSED_ROOT = Path("private/parsed")
 
 PdfExtractionStatus = Literal["EXTRACTED", "NEEDS_REVIEW"]
 

@@ -1,4 +1,4 @@
-"""Build sanitized advisory context from private SpotGamma parsed JSON."""
+"""Build sanitized advisory context from private vendor parsed JSON."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ LaneStatus = Literal[
     "PARSE_FAILED_NON_BLOCKING",
 ]
 
-PRIVATE_PARSED_ROOT = Path("private/parsed/spotgamma")
+PRIVATE_PARSED_ROOT = Path("private/parsed")
 
 
 def _lane_status(
@@ -59,67 +59,67 @@ def discover_private_parsed_paths(
     *,
     run_date: str,
 ) -> tuple[Path | None, Path | None]:
-    """Return (founders_note_path, flowpatrol_path) for a session date."""
+    """Return (macro_note_path, flow_report_path) for a session date."""
     if not run_date:
         return None, None
     stem_date = run_date.replace("-", "_")
     parsed_dir = base_dir / PRIVATE_PARSED_ROOT
-    founders = parsed_dir / f"founders_note_{stem_date}.json"
-    flow = parsed_dir / f"flowpatrol_{stem_date}.json"
+    macro = parsed_dir / f"macro_note_{stem_date}.json"
+    flow = parsed_dir / f"flow_report_{stem_date}.json"
     return (
-        founders if founders.is_file() else None,
+        macro if macro.is_file() else None,
         flow if flow.is_file() else None,
     )
 
 
 def build_sanitized_advisory_context(
     *,
-    founders_note: dict[str, Any] | None = None,
-    flowpatrol: dict[str, Any] | None = None,
+    macro_note: dict[str, Any] | None = None,
+    flow_report: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Produce operator-safe advisory context without proprietary prose or tables."""
     macro_status = _lane_status(
-        founders_note,
-        required_fields=("macro_theme", "founders_note_summary"),
+        macro_note,
+        required_fields=("macro_theme", "macro_note_summary"),
     )
     flow_status = _lane_status(
-        flowpatrol,
-        required_fields=("executive_summary_bullets", "top_symbols"),
+        flow_report,
+        required_fields=("overview_bullets", "top_symbols"),
     )
     skew_status = _lane_status(
-        founders_note,
+        macro_note,
         required_fields=("skew_commentary", "risk_reversal_25d"),
     )
     vol_status = _lane_status(
-        founders_note,
-        required_fields=("volatility_trigger", "sg_implied_1d_move_pct"),
+        macro_note,
+        required_fields=("volatility_trigger", "implied_1d_move_pct"),
     )
     index_status = _lane_status(
-        founders_note,
+        macro_note,
         required_fields=("call_wall", "put_wall", "zero_gamma_level"),
     )
 
     summary_parts: list[str] = []
-    if founders_note:
-        theme = str(founders_note.get("macro_theme", "") or "").strip()
+    if macro_note:
+        theme = str(macro_note.get("macro_theme", "") or "").strip()
         if theme:
             summary_parts.append(_truncate(f"Macro: {theme}", 120))
-        levels = founders_note.get("key_spx_levels") or {}
+        levels = macro_note.get("index_levels") or {}
         if isinstance(levels, dict):
             res = levels.get("resistance")
             sup = levels.get("support")
             if res is not None and sup is not None:
-                summary_parts.append(f"SPX range ref resistance={res} support={sup}")
-    if flowpatrol:
-        bullets = flowpatrol.get("executive_summary_bullets") or []
+                summary_parts.append(f"Index range ref resistance={res} support={sup}")
+    if flow_report:
+        bullets = flow_report.get("overview_bullets") or []
         if bullets and isinstance(bullets, list):
             summary_parts.append(_truncate(f"Flow: {bullets[0]}", 120))
-        top_syms = flowpatrol.get("top_symbols") or []
+        top_syms = flow_report.get("top_symbols") or []
         if top_syms:
-            summary_parts.append("Top flow symbols: " + ", ".join(str(s) for s in top_syms[:5]))
+            summary_parts.append("Top symbols: " + ", ".join(str(s) for s in top_syms[:5]))
 
     gate_levels: dict[str, float | None] = {}
-    if founders_note:
+    if macro_note:
         for key in (
             "call_wall",
             "put_wall",
@@ -127,27 +127,27 @@ def build_sanitized_advisory_context(
             "volatility_trigger",
             "absolute_gamma_strike",
         ):
-            val = founders_note.get(key)
+            val = macro_note.get(key)
             gate_levels[key] = float(val) if val is not None else None
-        levels = founders_note.get("key_spx_levels")
+        levels = macro_note.get("index_levels")
         if isinstance(levels, dict):
             for k, v in levels.items():
-                gate_levels[f"spx_{k}"] = float(v) if v is not None else None
+                gate_levels[f"index_{k}"] = float(v) if v is not None else None
 
     top_sectors: list[str] = []
-    if flowpatrol:
-        for row in flowpatrol.get("sector_statistical_analysis") or []:
+    if flow_report:
+        for row in flow_report.get("sector_stats") or []:
             if isinstance(row, dict) and row.get("sector"):
                 top_sectors.append(str(row["sector"]))
 
     return {
         "source_presence": {
-            "founders_note": founders_note is not None,
-            "flowpatrol": flowpatrol is not None,
+            "macro_note": macro_note is not None,
+            "flow_report": flow_report is not None,
         },
         "parse_confidence": {
-            "founders_note": (founders_note or {}).get("parse_confidence", "MISSING"),
-            "flowpatrol": (flowpatrol or {}).get("parse_confidence", "MISSING"),
+            "macro_note": (macro_note or {}).get("parse_confidence", "MISSING"),
+            "flow_report": (flow_report or {}).get("parse_confidence", "MISSING"),
         },
         "lanes": {
             "macro_context": macro_status,
@@ -158,9 +158,9 @@ def build_sanitized_advisory_context(
         },
         "operator_safe_summary": ". ".join(summary_parts),
         "gate_levels": gate_levels,
-        "top_symbols": list((flowpatrol or {}).get("top_symbols") or [])[:10],
+        "top_symbols": list((flow_report or {}).get("top_symbols") or [])[:10],
         "top_sectors": top_sectors[:5],
-        "disclaimer": "SpotGamma-derived context is proprietary operator input, not investment advice.",
+        "disclaimer": "Private vendor-derived context; proprietary source redacted. Not investment advice.",
     }
 
 
@@ -169,7 +169,7 @@ def load_sanitized_private_context(
     *,
     run_date: str,
 ) -> dict[str, Any]:
-    founders_path, flow_path = discover_private_parsed_paths(base_dir, run_date=run_date)
-    founders = _load_private_json(founders_path) if founders_path else None
+    macro_path, flow_path = discover_private_parsed_paths(base_dir, run_date=run_date)
+    macro = _load_private_json(macro_path) if macro_path else None
     flow = _load_private_json(flow_path) if flow_path else None
-    return build_sanitized_advisory_context(founders_note=founders, flowpatrol=flow)
+    return build_sanitized_advisory_context(macro_note=macro, flow_report=flow)

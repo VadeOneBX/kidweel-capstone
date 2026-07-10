@@ -262,15 +262,11 @@ model.joblib
 .cursor/mcp.json
 .claude/settings.json
 
-# ---- SpotGamma private proprietary artifacts (SPOTGAMMA-PDF-PRIVATE-INGEST-C1) ----
+# ---- Private vendor artifacts (PRIVATE-VENDOR-INGEST-REDACTION-C1) ----
 private/
-**/*founder*note*.pdf
-**/*founder*note*.txt
-**/*flowpatrol*.pdf
-**/*flowpatrol*.txt
-**/*spotgamma*.pdf
-**/*spotgamma*.txt
-**/*spotgamma*.json
-data/raw/spotgamma/
-data/parsed/spotgamma/
-logs/spotgamma/
+data/raw/vendor/
+data/parsed/vendor/
+logs/vendor/
+**/*private*vendor*.pdf
+**/*private*vendor*.txt
+**/*private*vendor*.json
