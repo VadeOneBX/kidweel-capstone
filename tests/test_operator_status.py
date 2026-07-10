@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -12,11 +13,13 @@ _SCRIPT = _REPO_ROOT / "scripts" / "operator_status.py"
 
 
 def _run_operator_status(*args: str, base_dir: Path) -> subprocess.CompletedProcess[str]:
+    env = {**os.environ, "PYTHONPATH": str(_REPO_ROOT / "src")}
     return subprocess.run(
         [sys.executable, str(_SCRIPT), "--base-dir", str(base_dir), *args],
         capture_output=True,
         text=True,
         check=False,
+        env=env,
     )
 
 

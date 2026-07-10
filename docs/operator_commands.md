@@ -48,8 +48,8 @@ ls -lah data/spotgamma/inbox
 The upgraded Morning Regime is now the standard Morning Regime. Operators stage it as `morning_regime.xlsx`; the system detects upgraded tabs by sheet presence (`morning_regime`, `unusual_options_positions`, `stat_sig_positions`, `flow_candidates`). The `_UPGRADE` filename suffix is for tests and backward compatibility only—not a separate live intake path.
 
 ```bash
-# Stage the daily Morning Regime workbook
-cp /path/to/raw/morning_regime.xlsx data/spotgamma/inbox/morning_regime.xlsx
+# Stage the daily Morning Regime workbook (repo-relative paths from repo root)
+cp data/spotgamma/raw/$(date +%F)/morning_regime.xlsx data/spotgamma/inbox/morning_regime.xlsx
 
 # Run morning wake / staging
 uv run python scripts/daily_ingestion_wake.py --mode manual --base-dir .
@@ -61,7 +61,26 @@ uv run python scripts/orb_morning_loop.py --mode manual --base-dir .
 cat logs/morning_regime_latest.json
 ```
 
-`orb_morning_loop.py` runs ingestion wake again at loop start; that is expected. Fast advisory and the audit file are produced when the staged workbook includes the upgraded sheets. Paper submission remains gated by existing risk and macro gates.
+`orb_morning_loop.py` runs ingestion wake again at loop start; that is expected. Fast advisory and the audit file are produced when the staged workbook includes the upgraded sheets. Paper submission remains gated by existing risk and execution gates—not by AM-note parse quality alone.
+
+### Macro context degrade-not-block
+
+Priority (highest wins):
+
+1. `data/advisory/{run_id}_macro_context_override.json` (manual emergency override; audit-loud)
+2. Structured AM-note sidecar `.json` / `.csv` under staging (preferred)
+3. Workbook prose note inside staged `morning_regime.xlsx` (low-confidence fallback)
+4. Degraded non-blocking status (`MISSING_NON_BLOCKING` / `UNPARSED_NON_BLOCKING` on `morning_regime_status.macro_context`)
+
+Clarify:
+
+- Missing or unparsed AM-note / workbook prose **does not block** the morning loop; it reduces confidence and emits warnings.
+- Alpaca credential errors park **hydration** only; they are not macro-context failures.
+- Authoritative operator lanes live on `morning_regime_status` (upstream readiness spine).
+
+```bash
+uv run python scripts/operator_status.py --base-dir . --readiness
+```
 
 ### No-action outcomes
 
@@ -93,6 +112,13 @@ uv run python scripts/orb_morning_loop.py --mode manual --base-dir . --no-notify
 
 ```bash
 uv run python scripts/operator_status.py --base-dir .
+```
+
+## Check readiness lanes (morning_regime_status)
+
+```bash
+uv run python scripts/operator_status.py --base-dir . --readiness
+uv run python scripts/operator_status.py --base-dir . --run-id <run_id> --readiness
 ```
 
 ## View advisory brief (deterministic artifact)

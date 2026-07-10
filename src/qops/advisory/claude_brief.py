@@ -98,12 +98,17 @@ def generate_claude_brief(
     dealer_struct = advisory_payload.get("dealer_structure", {})
 
     policy_line = (
-        "**No AM note, no paper approval.** Raw context finds the board. "
-        "The AM note explains the board. The advisor decides whether the spread deserves attention."
+        "**Macro context is advisory.** Founder's Note / AM-note gaps degrade confidence "
+        "and emit warnings; they do not block the morning loop. Structured sidecars remain "
+        "preferred. Private macro lanes and morning_regime_status remain authoritative. "
+        "Alpaca credential errors park hydration separately."
     )
     morning = advisory_payload.get("morning_regime_status", {})
     if not isinstance(morning, dict):
         morning = {}
+    audit = advisory_payload.get("macro_context_audit", {})
+    if not isinstance(audit, dict):
+        audit = {}
     no_action_language = ""
     if str(morning.get("paper_action", "")) == "WITHHELD_QUALITY":
         no_action_language = (
@@ -128,6 +133,9 @@ Mode: `{manifest.mode}`
 | `macro_context_state` | `{advisory_payload.get("macro_context_state", "")}` |
 | `paper_gate_macro_status` | `{advisory_payload.get("paper_gate_macro_status", "")}` |
 | `am_note_required_before_paper` | `{am_required}` |
+| `macro_context_audit.status` | `{audit.get("status", "")}` |
+| `macro_context_audit.parse_status` | `{audit.get("parse_status", "")}` |
+| `macro_context_audit.source_type` | `{audit.get("source_type", "")}` |
 
 **Macro context:** {macro_summary}
 
@@ -240,8 +248,8 @@ Attractive is not approved. Selected is not optimal. Rejected is not broken.
 
 ## Advisory
 
-Context incomplete until private macro note context is available unless manual override is recorded.
-Hydration and expression frontier review may continue; paper approval is withheld when required.
+Macro context may be degraded or missing without blocking the morning loop unless safety forbids paper.
+Hydration and expression frontier review may continue; quality/no-action taxonomy remains first-class.
 
 The operator reviews the audit artifact paths below.
 

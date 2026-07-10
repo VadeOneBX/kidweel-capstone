@@ -50,12 +50,13 @@ def _passing_spread_row(**overrides: object) -> SpreadCandidateInputRow:
 
 
 def test_macro_gate_withholds_without_am_note(tmp_path: Path) -> None:
+    # MORNING-REGIME-DEGRADE-NOT-BLOCK-C1: missing AM note degrades; does not hard-block.
     gate = build_macro_paper_gate(tmp_path, run_id="2026-06-23-manual")
     assert gate.am_note_status == "NOT_AVAILABLE"
-    assert gate.macro_context_state == "PRE_AM_NOTE_CONTEXT_INCOMPLETE"
-    assert gate.am_note_required_before_paper is True
-    assert gate.paper_approval_allowed is False
-    assert "incomplete" in gate.macro_context_summary.lower()
+    assert gate.macro_context.status == "MACRO_CONTEXT_MISSING_NON_BLOCKING"
+    assert gate.am_note_required_before_paper is False
+    assert gate.paper_approval_allowed is True
+    assert "missing" in gate.macro_context_summary.lower() or "degraded" in gate.macro_context_summary.lower()
 
 
 def test_parse_am_note_json_example(tmp_path: Path) -> None:
@@ -80,6 +81,7 @@ def test_parse_am_note_json_example(tmp_path: Path) -> None:
 
 
 def test_apply_paper_gate_downgrades_approval(tmp_path: Path) -> None:
+    # AM-note incompleteness no longer downgrades approved paper rows.
     gate = build_macro_paper_gate(tmp_path, run_id="2026-06-23-manual")
     audit = pd.DataFrame(
         [
@@ -91,8 +93,10 @@ def test_apply_paper_gate_downgrades_approval(tmp_path: Path) -> None:
         ]
     )
     out = apply_am_note_paper_gate_to_audit(audit, gate)
-    assert out.iloc[0]["classification"] == "PAPER_GATE_WITHHELD"
-    assert out.iloc[0]["reject_reason"] == PAPER_GATE_AM_NOTE_INCOMPLETE
+    assert out.iloc[0]["classification"] == "APPROVED_PAPER"
+    assert out.iloc[0]["paper_approval_status"] == "APPROVED_FOR_PAPER_REVIEW"
+    assert out.iloc[0]["reject_reason"] == ""
+    assert PAPER_GATE_AM_NOTE_INCOMPLETE  # constant retained for audit compatibility
 
 
 def test_spread_candidate_guard_applies_am_note_gate(tmp_path: Path) -> None:
@@ -106,8 +110,8 @@ def test_spread_candidate_guard_applies_am_note_gate(tmp_path: Path) -> None:
         candidates_artifact=str(candidates),
     )
     audit = pd.read_csv(result.risk_audit_artifact)
-    assert audit.iloc[0]["classification"] == "PAPER_GATE_WITHHELD"
-    assert audit.iloc[0]["reject_reason"] == PAPER_GATE_AM_NOTE_INCOMPLETE
+    assert audit.iloc[0]["classification"] != "PAPER_GATE_WITHHELD"
+    assert str(audit.iloc[0].get("reject_reason", "")) != PAPER_GATE_AM_NOTE_INCOMPLETE
 
 
 def test_manual_override_allows_paper_gate(tmp_path: Path) -> None:
