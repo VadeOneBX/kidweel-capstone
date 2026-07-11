@@ -1,4 +1,9 @@
-"""MCP-C12A: Alpaca paper transport bridge."""
+"""MCP-C12A: Alpaca paper transport bridge.
+
+Unit tests only. Broker/network paths are mocked or fail-closed.
+Live credential integration is marked ``integration`` and skipped when
+``ALPACA_PAPER_*`` is absent (see tests/conftest.py).
+"""
 
 from __future__ import annotations
 
@@ -34,6 +39,15 @@ from qops.execution.mcp_response import normalize_mcp_response
 from qops.execution.hitl_paper_transport import apply_operator_decision, load_or_create_approval
 from qops.execution.paper_payload_candidate import PaperPayloadCandidate
 from qops.schemas.playbook import AllowedPlaybook
+
+from tests.env_assumptions import (
+    ALPACA_PAPER_INTEGRATION_ENV,
+    require_alpaca_paper_integration_env,
+)
+
+# Explicit unit-test env contract: these tests inject or clear vars; they must not
+# require a developer .env or live credentials to collect/pass.
+_UNIT_TEST_DECLARED_ENV = ALPACA_PAPER_INTEGRATION_ENV
 
 
 def _ready_payload(**overrides: object) -> PaperPayloadCandidate:
@@ -285,11 +299,40 @@ def test_submit_alpaca_paper_mleg_order_maps_response(mock_client_cls: MagicMock
     assert call_kwargs["url_override"] == CANONICAL_PAPER_BASE_URL
 
 
+def test_unit_suite_declares_paper_env_assumptions() -> None:
+    """Unit collection must not require live ALPACA_PAPER_*; names are documented."""
+    assert _UNIT_TEST_DECLARED_ENV == (
+        "ALPACA_PAPER_API_KEY",
+        "ALPACA_PAPER_SECRET_KEY",
+        "ALPACA_PAPER_BASE_URL",
+    )
+
+
 def test_auth_mode_defaults_to_env_triplet() -> None:
     with patch("examples.submit_paper_payload_candidates._print_env_triplet_check", return_value=0):
         with pytest.raises(SystemExit) as exc:
             submit_main(["--env-check"])
         assert exc.value.code == 0
+
+
+def test_require_paper_integration_env_skips_when_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for key in ALPACA_PAPER_INTEGRATION_ENV:
+        monkeypatch.delenv(key, raising=False)
+    with pytest.raises(pytest.skip.Exception) as skipped:
+        require_alpaca_paper_integration_env()
+    assert "ALPACA_PAPER_" in str(skipped.value)
+
+
+@pytest.mark.integration
+def test_integration_paper_credentials_ready_when_env_present() -> None:
+    """Live ALPACA_PAPER_* check; skipped when credentials are not exported."""
+    require_alpaca_paper_integration_env()
+    with patch("qops.execution.alpaca_paper_bridge.load_local_env", return_value=False):
+        check = check_alpaca_paper_credentials()
+    assert check.credential_status == "READY"
+    assert check.endpoint_ok is True
 
 
 def test_profile_cli_argv_includes_quiet_not_live_or_secret() -> None:
@@ -360,9 +403,16 @@ def test_profile_cli_submit_blocked() -> None:
 
 
 def test_submit_paper_profile_cli_fails_closed() -> None:
-    with pytest.raises(SystemExit) as exc:
-        submit_main(["--submit-paper", "--auth-mode", "profile_cli"])
-    assert exc.value.code == 1
+    # Fail closed before any credential load or broker I/O.
+    with patch("examples.submit_paper_payload_candidates.load_local_env") as mocked_env:
+        with patch(
+            "examples.submit_paper_payload_candidates.run_paper_payload_transport",
+        ) as mocked_transport:
+            with pytest.raises(SystemExit) as exc:
+                submit_main(["--submit-paper", "--auth-mode", "profile_cli"])
+            assert exc.value.code == 1
+            mocked_env.assert_not_called()
+            mocked_transport.assert_not_called()
 
 
 def test_load_local_env_populates_paper_triplet_for_check(tmp_path: Path) -> None:

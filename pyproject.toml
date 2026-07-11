@@ -53,4 +53,7 @@ dev = [
 where = ["src"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
+markers = [
+    "integration: requires live broker/network credentials; skipped when required env is absent",
+]
