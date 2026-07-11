@@ -4,7 +4,7 @@ Explicit ownership across **operator**, implementation surfaces (Cursor, Claude 
 
 **Surface taxonomy:** [CLAUDE.md](../CLAUDE.md#surface-taxonomy-authority-matters).
 
-**Authority chain:** [c13-governance.md](./c13-governance.md) → [system-identity.md](./system-identity.md) → [subagent-governance.md](./subagent-governance.md) → [AGENTS.md](../AGENTS.md) / [CLAUDE.md](../CLAUDE.md). SpotGamma agent mapping: [AGENT-MAP-C1_spotgamma_strategy.md](../AGENT-MAP-C1_spotgamma_strategy.md); [AGENT-MAP-C1a_corrections.md](../AGENT-MAP-C1a_corrections.md) supersedes C1 on conflict. Handoffs must cite these paths when the packet scopes SpotGamma / strategy-group roles; POLICY and STRUCTURE still win per [c13-governance.md](./c13-governance.md).
+**Authority chain:** [c13-governance.md](./c13-governance.md) → [system-identity.md](./system-identity.md) → [subagent-governance.md](./subagent-governance.md) → [AGENTS.md](../AGENTS.md) / [CLAUDE.md](../CLAUDE.md). Bounded delegation (public): Agent work → Gate → Human review → Decision → Audit. POLICY and STRUCTURE still win per [c13-governance.md](./c13-governance.md).
 
 **Doctrine (required language):**
 

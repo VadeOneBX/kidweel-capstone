@@ -34,7 +34,7 @@ Handoffs are **docs and advisory** unless a separate **implementation packet** e
 
 1. Coordinator assigns packet ID and objective.
 2. Cursor copies [TEMPLATE_cursor_to_claude.md](./TEMPLATE_cursor_to_claude.md) to a named file, e.g. `docs/handoffs/<packet_id>_cursor_to_claude.md`.
-3. Fill **Allowed input files** and **Required source-of-truth files** (POLICY, STRUCTURE, [AGENT-MAP-C1_spotgamma_strategy.md](../AGENT-MAP-C1_spotgamma_strategy.md) and [AGENT-MAP-C1a_corrections.md](../AGENT-MAP-C1a_corrections.md) when applicable — C1a wins on conflict — plus audit inputs).
+3. Fill **Allowed input files** and **Required source-of-truth files** (POLICY, STRUCTURE, plus audit inputs). Public delegation stays abstract: Agent work → Gate → Human review → Decision → Audit.
 4. Set **Required output file** path for Claude’s response.
 5. Commit or stage per coordinator practice so Claude reads the same revision.
 

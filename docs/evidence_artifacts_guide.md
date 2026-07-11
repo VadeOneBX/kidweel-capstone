@@ -30,7 +30,7 @@ SpotGamma ingestion
 
 Visual: [diagrams/system_operating_loop.svg](../diagrams/system_operating_loop.svg).
 
-**Agent map (compact):** [AGENT-MAP-C1_spotgamma_strategy.md](../AGENT-MAP-C1_spotgamma_strategy.md). On conflict, [AGENT-MAP-C1a_corrections.md](../AGENT-MAP-C1a_corrections.md) wins.
+**Bounded delegation:** Agent work → Gate → Human review → Decision → Audit.
 
 ---
 

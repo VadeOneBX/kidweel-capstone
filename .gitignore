@@ -262,6 +262,9 @@ model.joblib
 .cursor/mcp.json
 .claude/settings.json
 
+# Root agent maps (not public-safe; private archive only)
+/AGENT-MAP*
+
 # ---- Private vendor artifacts (PRIVATE-VENDOR-INGEST-REDACTION-C1) ----
 private/
 data/raw/vendor/
