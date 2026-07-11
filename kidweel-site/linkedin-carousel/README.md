@@ -49,7 +49,7 @@ The packet's Scene 5 text block specified "Selected is still reviewed." The appr
 
 ## Export
 
-Native 1080x1350 panels are rendered via Playwright/Chromium (not screenshots, not upscaling) using `body.export-mode` CSS in `source.html`, which isolates one panel at a time and scales every dimension by the exact preview-to-target factor (1080/380 = 54/19).
+Native 1080x1350 panels are rendered via Playwright/Chromium at full resolution, not manually screenshotted or raster-upscaled. The `body.export-mode` CSS in `source.html` isolates one panel at a time and scales every dimension by the exact preview-to-target factor (1080/380 = 54/19).
 
 Run:
 
@@ -58,7 +58,7 @@ pip install playwright pillow
 python scripts/export_kidweel_carousel.py
 ```
 
-Chromium must already be installed (this environment provides it at `/opt/pw-browsers/chromium`) — the script does not run `playwright install`.
+This environment provides Chromium at `/opt/pw-browsers/chromium`. In another environment, install Playwright browsers or pass a compatible Chromium path if the script supports it.
 
 Optional flags: `--source`, `--out-dir`, `--width`, `--height` (defaults: this directory's `source.html`, this directory, 1080, 1350).
 
