@@ -17,29 +17,59 @@ LaneStatus = Literal[
 PRIVATE_PARSED_ROOT = Path("private/parsed")
 
 
+def _field_present(value: object) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, tuple, dict)):
+        return bool(value)
+    return True
+
+
+def _has_gate_levels(parsed: dict[str, Any]) -> bool:
+    return any(
+        parsed.get(k) is not None
+        for k in ("call_wall", "put_wall", "zero_gamma_level", "volatility_trigger")
+    )
+
+
 def _lane_status(
     parsed: dict[str, Any] | None,
     *,
     required_fields: tuple[str, ...],
 ) -> LaneStatus:
+    """Map parsed private JSON to a readiness lane.
+
+    MISSING = file/object absent.
+    PARSE_FAILED = present but NEEDS_REVIEW or no usable fields.
+    PARTIAL = present with some usable fields.
+    READY / READY_LOW_CONFIDENCE = required fields present.
+    """
     if parsed is None:
         return "MISSING_NON_BLOCKING"
     if parsed.get("parse_status") == "NEEDS_REVIEW":
         return "PARSE_FAILED_NON_BLOCKING"
+
     confidence = str(parsed.get("parse_confidence", "") or "").upper()
-    if not parsed.get("report_date"):
-        has_gate_levels = any(
-            parsed.get(k) is not None
-            for k in ("call_wall", "put_wall", "zero_gamma_level", "volatility_trigger")
-        )
-        if not has_gate_levels:
-            return "PARSE_FAILED_NON_BLOCKING"
-    missing = [f for f in required_fields if not parsed.get(f)]
-    if missing:
-        return "PARTIAL" if any(parsed.get(f) for f in required_fields) else "PARSE_FAILED_NON_BLOCKING"
-    if confidence in {"LOW", "MEDIUM"}:
-        return "READY_LOW_CONFIDENCE"
-    return "READY"
+    missing_required = [f for f in required_fields if not _field_present(parsed.get(f))]
+    any_required = any(_field_present(parsed.get(f)) for f in required_fields)
+
+    if not missing_required:
+        # Required content present. Missing report_date alone must not fail the lane
+        # (flow reports may omit date while still carrying bullets/symbols).
+        if confidence in {"LOW", "MEDIUM"}:
+            return "READY_LOW_CONFIDENCE"
+        return "READY"
+
+    if any_required:
+        return "PARTIAL"
+
+    # No required fields, but artifact may still carry usable alternate signals.
+    if _has_gate_levels(parsed) or _field_present(parsed.get("report_date")):
+        return "PARTIAL"
+
+    return "PARSE_FAILED_NON_BLOCKING"
 
 
 def _truncate(text: str, limit: int = 240) -> str:
@@ -177,4 +207,11 @@ def load_sanitized_private_context(
     macro_path, flow_path = discover_private_parsed_paths(base_dir, run_date=run_date)
     macro = _load_private_json(macro_path) if macro_path else None
     flow = _load_private_json(flow_path) if flow_path else None
-    return build_sanitized_advisory_context(macro_note=macro, flow_report=flow)
+    ctx = build_sanitized_advisory_context(macro_note=macro, flow_report=flow)
+    stem_date = run_date.replace("-", "_") if run_date else ""
+    ctx["sources"] = {
+        "macro_note": str(macro_path) if macro_path else "",
+        "flow_report": str(flow_path) if flow_path else "",
+        "source_date": stem_date,
+    }
+    return ctx

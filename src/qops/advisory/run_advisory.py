@@ -28,6 +28,7 @@ from qops.advisory.expression_frontier import (
     build_expression_frontier,
     format_expression_frontier_section,
 )
+from qops.advisory.run_readiness import build_operator_next_actions
 from qops.advisory.spread_skeptic import SpreadSkepticNote, build_spread_skeptic_notes
 from qops.runtime.orb_manifest import OrbRunManifest
 from qops.risk.guard_runner import summarize_risk_audit
@@ -76,14 +77,16 @@ _AUDIT_TO_MORNING_MACRO = {
 
 
 def _morning_macro_context(gate: MacroPaperGate, private_lanes: dict[str, object] | None = None) -> str:
-    # Private vendor macro is authoritative when present/usable.
-    # MISSING/PARSE_FAILED fall through so AM-note / workbook prose degrade path can fill the lane.
+    # Private vendor macro is authoritative when the artifact exists.
+    # PARSE_FAILED/PARTIAL/READY must not collapse to MISSING when a file was found.
+    # Only MISSING_NON_BLOCKING falls through to AM-note / workbook prose degrade path.
     if private_lanes:
         lane = str(private_lanes.get("macro_context", "") or "")
         if lane in {
             "READY",
             "READY_LOW_CONFIDENCE",
             "PARTIAL",
+            "PARSE_FAILED_NON_BLOCKING",
         }:
             return lane
     audit = getattr(gate, "macro_context", None)
@@ -204,17 +207,11 @@ def _build_morning_regime_status(
         reasons = ["operator_watch_review_required", *reasons]
     top_reasons = reasons[:5]
 
-    next_action = ""
-    if quality_gate == "WATCH" and selected_expression is None:
-        next_action = "Explicit operator WATCH review/promotion required; no auto-promotion."
-    elif paper_action == "WITHHELD_QUALITY":
-        next_action = "No paper action. Quality gate withheld selection."
-
     private_lanes = {}
     if private_context and isinstance(private_context.get("lanes"), dict):
         private_lanes = private_context["lanes"]
 
-    return {
+    morning_core = {
         "run_status": manifest.status,
         "woke": True,
         "macro_context": _morning_macro_context(gate, private_lanes),
@@ -232,7 +229,28 @@ def _build_morning_regime_status(
         "parked_count": parked_count,
         "rejected_count": rejected_count,
         "top_reasons": top_reasons,
+    }
+    actions = build_operator_next_actions(
+        morning=morning_core,
+        private_vendor_context=private_context if isinstance(private_context, dict) else None,
+        stored_morning=morning_core,
+    )
+    next_action = "; ".join(
+        f"{a['id']}: {a['command']}" for a in actions if a.get("command")
+    )
+    if quality_gate == "WATCH" and selected_expression is None and not next_action:
+        next_action = "Explicit operator WATCH review/promotion required; no auto-promotion."
+    elif paper_action == "WITHHELD_QUALITY" and not any(
+        a.get("id") == "diagnose_quote_hydration" for a in actions
+    ):
+        # Keep quality prose when hydration is not the parked reason.
+        if not next_action or next_action.startswith("view_readiness:"):
+            next_action = "No paper action. Quality gate withheld selection."
+
+    return {
+        **morning_core,
         "operator_next_action": next_action,
+        "operator_next_actions": actions,
     }
 
 
@@ -300,6 +318,26 @@ def build_run_advisory(
     session_date = run_date_from_run_id(manifest.run_id)
     private_context = load_sanitized_private_context(base_dir, run_date=session_date)
 
+    macro_context_summary = gate.macro_context_summary
+    private_lanes = (
+        private_context.get("lanes") if isinstance(private_context.get("lanes"), dict) else {}
+    )
+    if str(private_lanes.get("macro_context", "") or "") == "PARTIAL" and (
+        gate.macro_context.status == "MACRO_CONTEXT_MISSING_NON_BLOCKING"
+        or gate.macro_context.parse_status == "MISSING_OPTIONAL_CONTEXT"
+    ):
+        macro_context_summary = (
+            "Private macro context is PARTIAL. "
+            "AM-note / Founder's Note prose remains missing or incomplete. "
+            "Morning loop continues with degraded macro confidence."
+        )
+
+    dealer_positioning_summary = gate.dealer_positioning_summary or dealer.structure_summary
+    if not gate.am_note_required_before_paper:
+        lowered = dealer_positioning_summary.lower()
+        if "required before paper" in lowered or "still required" in lowered:
+            dealer_positioning_summary = dealer.structure_summary
+
     staged = staged_files or manifest.staged_files
     flow_intake_payload: dict[str, object] | None = None
     morning_regime_audit_artifact = ""
@@ -333,14 +371,21 @@ def build_run_advisory(
     else:
         frontier_csv = None
 
+    morning_status = _build_morning_regime_status(
+        manifest,
+        gate,
+        risk_df,
+        expressions_df,
+        private_context,
+    )
+
     payload: dict[str, object] = {
         "run_id": manifest.run_id,
         "am_note_status": gate.am_note_status,
         "macro_context_state": gate.macro_context_state,
         "paper_gate_macro_status": gate.paper_gate_macro_status,
-        "macro_context_summary": gate.macro_context_summary,
-        "dealer_positioning_summary": gate.dealer_positioning_summary
-        or dealer.structure_summary,
+        "macro_context_summary": macro_context_summary,
+        "dealer_positioning_summary": dealer_positioning_summary,
         "macro_catalyst_summary": gate.macro_catalyst_summary,
         "spread_posture": gate.spread_posture,
         "am_note_required_before_paper": gate.am_note_required_before_paper,
@@ -354,13 +399,9 @@ def build_run_advisory(
             "structure_summary": dealer.structure_summary,
         },
         "spread_skeptic_notes": [asdict(n) for n in skeptic_notes],
-        "morning_regime_status": _build_morning_regime_status(
-            manifest,
-            gate,
-            risk_df,
-            expressions_df,
-            private_context,
-        ),
+        "morning_regime_status": morning_status,
+        "operator_next_actions": morning_status.get("operator_next_actions", []),
+        "operator_next_action": morning_status.get("operator_next_action", ""),
         "macro_context_audit": {
             "status": gate.macro_context.status,
             "source_type": gate.macro_context.source_type,

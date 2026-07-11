@@ -160,6 +160,57 @@ find data/processed -type f | sort | tail -n 20
 
 Private vendor PDFs may be used as local advisory inputs.
 
+### Private PDF intake boundary
+
+`private/raw/` accepts sanitized working PDFs only.
+
+Before placing a PDF under `private/raw/`, remove material that is not required for the intended parser lane, including:
+
+- images and screenshots
+- advertisements, appendices, and unrelated sections
+- personal or account-identifying information
+
+Keep only the text and tables needed for the selected lane:
+
+- `macro_note`
+- `flow_report`
+
+The original source PDF must remain outside the repository tree.
+
+`private/raw/` means raw input to the parser. It does not mean an untouched source document.
+
+### Private PDF preparation workflow
+
+```text
+Original source:
+outside repo
+
+Sanitized derivative:
+private/raw/macro_note_YYYY_MM_DD.pdf
+private/raw/flow_report_YYYY_MM_DD.pdf
+
+Parser outputs:
+private/text/{stem}.txt
+private/parsed/{stem}.json
+```
+
+Operator preflight (placement check only; does not sanitize):
+
+```bash
+find private/raw -maxdepth 1 -type f -name '*.pdf' -print
+git check-ignore -v private/raw/*.pdf
+```
+
+### Private PDF operator commands
+
+| Action | Exact command |
+|--------|----------------|
+| Regenerate morning advisory artifact | `uv run python scripts/orb_morning_loop.py --mode manual --base-dir .` |
+| View readiness (read-only) | `uv run python scripts/operator_status.py --base-dir . --readiness` |
+| Diagnose Alpaca market-data credentials | `uv run python scripts/alpaca_fetch.py --env-check` |
+
+Hydration retry is not a separate CLI. Quote hydration runs inside the morning loop pipeline; after credentials/data are fixed, regenerate with `orb_morning_loop.py`.
+
 Rules:
 
 - Store raw PDFs only under `private/raw/`.
@@ -197,7 +248,32 @@ uv run python scripts/parse_private_vendor_pdf.py \
   --out private/parsed/flow_report_2026_07_09.json
 ```
 
-Exit code **2** means text extraction failed (`NEEDS_REVIEW`); use operator review—do not enable OCR in the automated path.
+Expected success line:
+
+```bash
+Wrote private/parsed/<stem>.json
+```
+
+### Private PDF parse exit reasons
+
+Private PDF parsing writes private artifacts only under `private/`.
+
+| Exit | Meaning | Operator action |
+|------|---------|-----------------|
+| `0` | Parse succeeded. Parsed JSON was written to `private/parsed/`. | Continue to readiness check. |
+| `2` | `NEEDS_REVIEW`. The parser wrote JSON, but the source had no extractable text or could not be confidently parsed. | Review the PDF/text manually. Do not treat it as a clean parse. |
+| other | Parse failed unexpectedly. | Check stderr, file path, kind, and private directory setup. |
+
+There is no dedicated parse audit file; use stdout/stderr and the written JSON.
+
+### OCR posture
+
+No OCR is performed.
+
+If a PDF has no extractable text, the parser returns `NEEDS_REVIEW` and writes review-marked JSON to the requested output path.
+
+Operator action:
+use a text-based PDF when available, or manually review the source outside the repo.
 
 ## Emergency halt
 

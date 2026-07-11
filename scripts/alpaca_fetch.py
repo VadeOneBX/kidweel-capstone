@@ -25,7 +25,11 @@ from qops.backtest.alpaca_greeks_layer import (
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Read-only Alpaca chain fetch (admin skill)")
     parser.add_argument("--base-dir", default=".", type=Path)
-    parser.add_argument("--symbols", required=True, help="Comma-separated underlyings")
+    parser.add_argument(
+        "--symbols",
+        default=None,
+        help="Comma-separated underlyings (required with --fetch; optional for --env-check)",
+    )
     parser.add_argument("--dte-range", nargs=2, type=int, metavar=("MIN", "MAX"))
     parser.add_argument("--delta-filter", nargs=2, type=float, metavar=("LOW", "HIGH"))
     parser.add_argument("--fetch", action="store_true", help="Perform read-only chain fetch")
@@ -36,7 +40,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--output", type=Path, default=None, help="Write JSON snapshot rows")
     parser.add_argument("--quiet", action="store_true")
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.fetch and not args.env_check and not args.symbols:
+        parser.error("--symbols is required with --fetch")
+    return args
 
 
 def _quote_age_seconds(quote_ts: object) -> int | None:
@@ -109,7 +116,11 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"error": "invalid_dte_range"}))
         return 1
 
-    symbols = [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
+    symbols = [s.strip().upper() for s in str(args.symbols or "").split(",") if s.strip()]
+    if not symbols:
+        if not args.quiet:
+            print(json.dumps({"error": "symbols_required"}))
+        return 1
     specs = [
         PaperLiveSymbolSpec(
             symbol=sym,

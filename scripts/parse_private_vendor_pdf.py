@@ -18,7 +18,15 @@ from qops.advisory.private_vendor_pdf_ingest import (
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Parse private vendor PDF artifacts.")
+    parser = argparse.ArgumentParser(
+        description="Parse private vendor PDF artifacts.",
+        epilog=(
+            "Exit codes: 0=success (Wrote private/parsed/<stem>.json); "
+            "2=NEEDS_REVIEW (JSON still written; no extractable text; no OCR). "
+            "Other nonzero=unexpected failure."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument(
         "--kind",
         required=True,

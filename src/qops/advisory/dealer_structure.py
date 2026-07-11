@@ -132,7 +132,8 @@ def assess_dealer_structure(context_df: pd.DataFrame) -> DealerStructureAssessme
             call_wall_movement="CALL_WALL_UNCHANGED",
             advisory_bias="WAIT_FOR_CONFIRMATION",
             structure_summary=(
-                "Pre-AM note dealer structure unavailable; wait for Founder note before paper approval."
+                "Pre-AM note dealer structure unavailable; Founder's Note prose remains "
+                "optional low-confidence enrichment."
             ),
             current=None,
             prior=None,
@@ -155,14 +156,15 @@ def assess_dealer_structure(context_df: pd.DataFrame) -> DealerStructureAssessme
 
     if bias == "DEFENSIVE":
         summary = (
-            "Pre-AM note structure is defensive. Gamma regime appears unstable, and the advisory "
-            "should wait for the Founder's Note before promoting directional bull call spreads. "
-            "Candidates may be hydrated, but approvals should remain withheld."
+            "Pre-AM note structure is defensive. Gamma regime appears unstable; treat "
+            "directional bull call spreads cautiously until Founder's Note prose arrives "
+            "as optional low-confidence enrichment. Candidates may be hydrated; paper "
+            "approval remains governed by quality/hydration gates, not AM-note presence."
         )
     else:
         summary = (
-            "Pre-AM note structure recorded from SpotGamma; AM Founder note still required "
-            "before paper approval."
+            "Pre-AM note structure recorded from SpotGamma; Founder's Note prose remains "
+            "optional low-confidence enrichment."
         )
 
     return DealerStructureAssessment(

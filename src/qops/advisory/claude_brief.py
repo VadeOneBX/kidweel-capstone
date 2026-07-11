@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 from pydantic import BaseModel
@@ -14,6 +15,7 @@ from qops.advisory.idea_distillation import (
     format_policy_votes_section,
 )
 from qops.advisory.run_advisory import build_run_advisory, format_spread_skeptic_section
+from qops.advisory.run_readiness import build_operator_next_actions
 from qops.advisory.spread_skeptic import SpreadSkepticNote
 from qops.advisory.subagent_ideas import load_tier3_ideas
 from qops.pipeline.alpaca_hydration_loop import summarize_expression_artifact
@@ -29,6 +31,126 @@ def _format_reasons(reasons: list[str]) -> str:
     if not reasons:
         return "- (none recorded)"
     return "\n".join(f"- `{reason}`" for reason in reasons)
+
+
+def _format_operator_actions(actions: list[dict[str, str]]) -> str:
+    if not actions:
+        return "- (none)"
+    lines: list[str] = []
+    for action in actions:
+        lines.append(
+            f"- `{action.get('id', '')}`: `{action.get('command', '')}`\n"
+            f"  reason: {action.get('reason', '')}\n"
+            f"  expected: {action.get('expected_output', '')}"
+        )
+    return "\n".join(lines)
+
+
+def format_macro_gate_brief_section(
+    *,
+    morning_regime_status: dict[str, Any],
+    advisory_payload: dict[str, Any],
+) -> str:
+    """Operator-facing macro gate section; morning_regime_status is canonical."""
+    morning = morning_regime_status if isinstance(morning_regime_status, dict) else {}
+    audit = advisory_payload.get("macro_context_audit", {})
+    if not isinstance(audit, dict):
+        audit = {}
+    private = advisory_payload.get("private_vendor_context", {})
+    if not isinstance(private, dict):
+        private = {}
+    conf = private.get("parse_confidence") if isinstance(private.get("parse_confidence"), dict) else {}
+    sources = private.get("sources") if isinstance(private.get("sources"), dict) else {}
+    lanes = private.get("lanes") if isinstance(private.get("lanes"), dict) else {}
+
+    am_required = bool(advisory_payload.get("am_note_required_before_paper", True))
+    dealer_summary = str(advisory_payload.get("dealer_positioning_summary", "") or "")
+    dealer_struct = advisory_payload.get("dealer_structure", {})
+    if not isinstance(dealer_struct, dict):
+        dealer_struct = {}
+    if not dealer_summary:
+        dealer_summary = str(dealer_struct.get("structure_summary", "") or "")
+    if not am_required:
+        # Never echo legacy "required before paper" copy when the gate does not require it.
+        lowered = dealer_summary.lower()
+        if "required before paper" in lowered or "still required" in lowered:
+            dealer_summary = (
+                "Pre-AM note structure recorded from SpotGamma; Founder's Note prose "
+                "remains optional low-confidence enrichment."
+            )
+
+    catalyst_summary = str(advisory_payload.get("macro_catalyst_summary", "") or "")
+    spread_posture = str(advisory_payload.get("spread_posture", "") or "")
+    pre_am = advisory_payload.get("pre_am_structure", {})
+    if not isinstance(pre_am, dict):
+        pre_am = {}
+
+    canonical_macro = str(morning.get("macro_context", "") or "")
+    policy_line = (
+        "**Macro context is advisory.** Founder's Note / AM-note gaps degrade confidence "
+        "and emit warnings; they do not block the morning loop. Structured sidecars remain "
+        "preferred. Private macro lanes and morning_regime_status remain authoritative. "
+        "Alpaca credential errors park hydration separately."
+    )
+
+    if canonical_macro == "PARTIAL":
+        macro_narrative = (
+            "Private macro context is PARTIAL.\n"
+            "AM-note / Founder's Note prose remains missing or incomplete.\n"
+            "Morning loop continues with degraded macro confidence."
+        )
+    elif canonical_macro in {"READY", "READY_LOW_CONFIDENCE"}:
+        macro_narrative = str(advisory_payload.get("macro_context_summary", "") or "")
+    elif canonical_macro in {"MISSING_NON_BLOCKING", "UNPARSED_NON_BLOCKING"}:
+        macro_narrative = str(advisory_payload.get("macro_context_summary", "") or "")
+    else:
+        macro_narrative = str(advisory_payload.get("macro_context_summary", "") or "")
+
+    flow_lane = str(morning.get("flow_context") or lanes.get("flow_context") or "")
+    flow_conf = str(conf.get("flow_report", "") or "")
+    source_date = str(sources.get("source_date", "") or "")
+    flow_lines = (
+        f"- flow_context (canonical): `{flow_lane}`\n"
+        f"- flow parse_confidence: `{flow_conf}`\n"
+        f"- private source_date: `{source_date}`"
+    )
+
+    return f"""## Macro context gate (private macro note)
+
+{policy_line}
+
+Canonical lane (`morning_regime_status.macro_context`): `{canonical_macro}`
+
+AM-note / Founder's Note prose audit (source split; not a second readiness taxonomy):
+
+| Field | Value |
+|-------|-------|
+| `am_note_status` | `{advisory_payload.get("am_note_status", "")}` |
+| `macro_context_state` | `{advisory_payload.get("macro_context_state", "")}` |
+| `paper_gate_macro_status` | `{advisory_payload.get("paper_gate_macro_status", "")}` |
+| `am_note_required_before_paper` | `{am_required}` |
+| `macro_context_audit.status` | `{audit.get("status", "")}` |
+| `macro_context_audit.parse_status` | `{audit.get("parse_status", "")}` |
+| `macro_context_audit.source_type` | `{audit.get("source_type", "")}` |
+
+**Macro context:**
+{macro_narrative}
+
+**Dealer positioning:** {dealer_summary}
+
+**Catalysts:** {catalyst_summary or "(none parsed)"}
+
+**Spread posture:** {spread_posture}
+
+**Pre-AM structure (retained when note arrives):** {pre_am.get("pre_note_advisory_summary", "")}
+
+Dealer structure bias (pre-AM): `{dealer_struct.get("advisory_bias", "")}`  
+Gamma regime: `{dealer_struct.get("gamma_regime", "")}`
+
+### Flow lane (private)
+
+{flow_lines}
+"""
 
 
 def generate_claude_brief(
@@ -72,9 +194,9 @@ def generate_claude_brief(
     ]
 
     context_df = pd.read_csv(manifest.context_artifact or "")
-    tier3_artifacts = load_tier3_ideas(base_dir, manifest.run_date, manifest.run_id)
+    tier3_ideas = load_tier3_ideas(base_dir, manifest.run_date, manifest.run_id)
     distillation = distill_subagent_ideas(
-        tier3_artifacts,
+        tier3_ideas,
         regime_label=str(summary.get("regime_label", "") or ""),
         context_df=context_df,
         expressions_df=expr_df,
@@ -89,26 +211,26 @@ def generate_claude_brief(
     advisory_path = advisory_dir / f"{manifest.run_id}_claude_brief.md"
     latest_path = advisory_dir / "latest_claude_brief.md"
 
-    am_required = advisory_payload.get("am_note_required_before_paper", True)
-    macro_summary = str(advisory_payload.get("macro_context_summary", ""))
-    dealer_summary = str(advisory_payload.get("dealer_positioning_summary", ""))
-    catalyst_summary = str(advisory_payload.get("macro_catalyst_summary", ""))
-    spread_posture = str(advisory_payload.get("spread_posture", ""))
-    pre_am = advisory_payload.get("pre_am_structure", {})
-    dealer_struct = advisory_payload.get("dealer_structure", {})
-
-    policy_line = (
-        "**Macro context is advisory.** Founder's Note / AM-note gaps degrade confidence "
-        "and emit warnings; they do not block the morning loop. Structured sidecars remain "
-        "preferred. Private macro lanes and morning_regime_status remain authoritative. "
-        "Alpaca credential errors park hydration separately."
-    )
     morning = advisory_payload.get("morning_regime_status", {})
     if not isinstance(morning, dict):
         morning = {}
-    audit = advisory_payload.get("macro_context_audit", {})
-    if not isinstance(audit, dict):
-        audit = {}
+    private = advisory_payload.get("private_vendor_context", {})
+    if not isinstance(private, dict):
+        private = {}
+
+    actions_raw = morning.get("operator_next_actions")
+    if isinstance(actions_raw, list) and actions_raw:
+        actions = [a for a in actions_raw if isinstance(a, dict)]
+    else:
+        actions = build_operator_next_actions(
+            morning=morning,
+            private_vendor_context=private,
+            stored_morning=morning,
+        )
+    next_action_display = morning.get("operator_next_action") or "; ".join(
+        f"{a['id']}: {a['command']}" for a in actions if a.get("command")
+    )
+
     no_action_language = ""
     if str(morning.get("paper_action", "")) == "WITHHELD_QUALITY":
         no_action_language = (
@@ -117,38 +239,18 @@ def generate_claude_brief(
             "Morning Regime completed with no-action decision."
         )
 
+    macro_section = format_macro_gate_brief_section(
+        morning_regime_status=morning,
+        advisory_payload=advisory_payload,
+    )
+
     body = f"""# Kidweel Morning Brief
 
 Run ID: `{manifest.run_id}`  
 Run status: `{manifest.status}`  
 Mode: `{manifest.mode}`
 
-## Macro context gate (private macro note)
-
-{policy_line}
-
-| Field | Value |
-|-------|-------|
-| `am_note_status` | `{advisory_payload.get("am_note_status", "")}` |
-| `macro_context_state` | `{advisory_payload.get("macro_context_state", "")}` |
-| `paper_gate_macro_status` | `{advisory_payload.get("paper_gate_macro_status", "")}` |
-| `am_note_required_before_paper` | `{am_required}` |
-| `macro_context_audit.status` | `{audit.get("status", "")}` |
-| `macro_context_audit.parse_status` | `{audit.get("parse_status", "")}` |
-| `macro_context_audit.source_type` | `{audit.get("source_type", "")}` |
-
-**Macro context:** {macro_summary}
-
-**Dealer positioning:** {dealer_summary or dealer_struct.get("structure_summary", "")}
-
-**Catalysts:** {catalyst_summary or "(none parsed)"}
-
-**Spread posture:** {spread_posture}
-
-**Pre-AM structure (retained when note arrives):** {pre_am.get("pre_note_advisory_summary", "") if isinstance(pre_am, dict) else ""}
-
-Dealer structure bias (pre-AM): `{dealer_struct.get("advisory_bias", "") if isinstance(dealer_struct, dict) else ""}`  
-Gamma regime: `{dealer_struct.get("gamma_regime", "") if isinstance(dealer_struct, dict) else ""}`
+{macro_section}
 
 Run advisory JSON: `{run_advisory_result.advisory_json_artifact}`
 
@@ -170,7 +272,11 @@ Run advisory JSON: `{run_advisory_result.advisory_json_artifact}`
 - parked_count: {morning.get("parked_count", 0)}
 - rejected_count: {morning.get("rejected_count", 0)}
 - top_reasons: {morning.get("top_reasons", [])}
-- operator_next_action: `{morning.get("operator_next_action", "")}`
+- operator_next_action: `{next_action_display}`
+
+### Operator next actions (exact commands)
+
+{_format_operator_actions(actions)}
 
 {no_action_language}
 
@@ -215,6 +321,14 @@ Run advisory JSON: `{run_advisory_result.advisory_json_artifact}`
 - Dealer tier D: {expr_summary.get("dealer_tier_d", 0)}
 - Dealer tier E: {expr_summary.get("dealer_tier_e", 0)}
 
+### Hydration operator commands
+
+{_format_operator_actions([a for a in actions if a.get("id") in {
+    "diagnose_quote_hydration",
+    "retry_hydration_via_morning_loop",
+    "view_readiness",
+}])}
+
 ### Top loop / context reasons
 
 {_format_reasons(list(summary.get("top_rejection_reasons", [])))}
@@ -226,7 +340,7 @@ Run advisory JSON: `{run_advisory_result.advisory_json_artifact}`
 
 ## Expression frontier review
 
-Selected is not optimal. Attractive is not approved.
+Selected is still reviewed. Attractive is not approved.
 
 Frontier review required: `{advisory_payload.get("frontier_review_required_before_paper", False)}`  
 Artifact: `{advisory_payload.get("expression_frontier_artifact", "")}`
@@ -235,7 +349,7 @@ Artifact: `{advisory_payload.get("expression_frontier_artifact", "")}`
 
 ## Spread skeptic review
 
-Attractive is not approved. Selected is not optimal. Rejected is not broken.
+Attractive is not approved. Selected is still reviewed. Rejected is not broken.
 
 {format_spread_skeptic_section(skeptic_notes)}
 

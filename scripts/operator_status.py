@@ -11,7 +11,9 @@ from qops.advisory.subagent_ideas import (
     count_idea_types,
     load_tier3_ideas,
 )
+from qops.advisory.private_context_builder import load_sanitized_private_context
 from qops.advisory.run_readiness import format_readiness_view
+from qops.advisory.am_note_gate import run_date_from_run_id
 from qops.runtime.orb_manifest import (
     OrbRunManifest,
     manifest_path,
@@ -68,10 +70,15 @@ def print_readiness_lanes(base_dir: Path, manifest: OrbRunManifest) -> int:
     if not isinstance(audit, dict):
         audit = None
 
+    session_date = run_date_from_run_id(manifest.run_id) or str(manifest.run_date or "")
+    # Refresh private lanes from current private/parsed (same taxonomy; not a second model).
+    private_ctx = load_sanitized_private_context(base_dir, run_date=session_date)
+
     payload = format_readiness_view(
         run_id=manifest.run_id,
         morning_regime_status=morning,
         macro_context_audit=audit,
+        private_vendor_context=private_ctx,
     )
     print(json.dumps(payload, indent=2))
     return 0

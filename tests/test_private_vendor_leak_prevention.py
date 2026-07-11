@@ -90,8 +90,15 @@ def test_readme_does_not_contain_vendor_product_names() -> None:
 
 
 def test_operator_commands_private_section_is_generic() -> None:
+    import re
+
     content = (REPO_ROOT / "docs" / "operator_commands.md").read_text(encoding="utf-8")
-    section = content.split("## Private vendor PDF ingest", 1)[-1].split("## ", 1)[0]
+    match = re.search(
+        r"(?ms)^## Private vendor PDF ingest\n(.*?)(?=^## |\Z)",
+        content,
+    )
+    assert match is not None, "missing Private vendor PDF ingest section"
+    section = match.group(1)
     _assert_no_banned_product_terms(section, context="operator_commands private section")
     _assert_no_spotgamma_prose(section, context="operator_commands private section")
     assert "private/raw/" in section
