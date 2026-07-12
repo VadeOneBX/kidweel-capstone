@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Kidweel Design System — Authority Line</title>
+<style>
+  body { margin: 0; background: #07090b; padding: 60px 24px; font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+  .authority-line {
+    position: relative;
+    max-width: 900px;
+    margin: 0 auto;
+    height: 1px;
+    background: #3fd9c7;
+  }
+  .authority-line span {
+    position: absolute;
+    top: -0.65rem;
+    font-size: 0.65rem;
+    letter-spacing: 0.2em;
+    background: #07090b;
+    padding: 0 0.5rem;
+  }
+  .authority-line .human { left: 0; color: #3fd9c7; }
+  .authority-line .agents { right: 0; color: #5a6469; }
+</style>
+</head>
+<body>
+  <!--
+    Responsive HUMAN —— AGENTS authority line.
+    Teal is reserved for the human-authority side of the system;
+    the agents side stays muted gray. Width is fluid (max-width
+    container), so it reflows at any viewport.
+  -->
+  <div class="authority-line" aria-hidden="true">
+    <span class="human">HUMAN</span>
+    <span class="agents">AGENTS</span>
+  </div>
+</body>
+</html>

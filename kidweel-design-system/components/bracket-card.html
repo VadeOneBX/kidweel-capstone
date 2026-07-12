@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Kidweel Design System — Bracket Card</title>
+<style>
+  body { margin: 0; background: #07090b; padding: 60px 24px; font-family: 'Space Grotesk', system-ui, sans-serif; color: #f2f4f5; }
+  .panel {
+    position: relative;
+    max-width: 640px;
+    margin: 0 auto;
+    background: #0f1215;
+    border-radius: 2px;
+    border: 1px solid #232a2e;
+    padding: 1.5rem;
+  }
+  .bracket {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-color: #2f383d;
+    border-style: solid;
+    border-width: 0;
+  }
+  .bracket.tl { top: 10px; left: 10px; border-top-width: 1px; border-left-width: 1px; }
+  .bracket.tr { top: 10px; right: 10px; border-top-width: 1px; border-right-width: 1px; }
+  .bracket.bl { bottom: 10px; left: 10px; border-bottom-width: 1px; border-left-width: 1px; }
+  .bracket.br { bottom: 10px; right: 10px; border-bottom-width: 1px; border-right-width: 1px; }
+  .panel h3 { margin: 0 0 0.5rem; font-size: 1.1rem; font-weight: 600; }
+  .panel p { margin: 0; color: #8b959b; font-size: 0.95rem; }
+</style>
+</head>
+<body>
+  <!--
+    Reusable dark card with the blueprint corner-bracket motif.
+    Drop any content inside .panel; the four .bracket divs are
+    decorative and size-independent of content.
+  -->
+  <div class="panel">
+    <div class="bracket tl"></div>
+    <div class="bracket tr"></div>
+    <div class="bracket bl"></div>
+    <div class="bracket br"></div>
+    <h3>Bracket card</h3>
+    <p>Any content — text, a diagram, a proof list — goes inside this container.</p>
+  </div>
+</body>
+</html>

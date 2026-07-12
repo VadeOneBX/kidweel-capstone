@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Kidweel mark — Bracket Frame, direction B. Two brackets in 180° rotational
+       symmetry about the center dot: mathematically balanced, not eyeballed. -->
+  <path d="M10,26 L10,10 L26,10" fill="none" stroke="#f2f4f5" stroke-width="4" stroke-linecap="square"/>
+  <path d="M54,38 L54,54 L38,54" fill="none" stroke="#f2f4f5" stroke-width="4" stroke-linecap="square"/>
+  <circle cx="32" cy="32" r="6" fill="#3fd9c7"/>
+</svg>

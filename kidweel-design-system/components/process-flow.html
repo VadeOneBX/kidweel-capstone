@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Kidweel Design System — Process Flow</title>
+<style>
+  body { margin: 0; background: #07090b; padding: 60px 24px; }
+  .flow-wrap { max-width: 900px; margin: 0 auto; }
+</style>
+</head>
+<body>
+  <!--
+    Public-safe process abstraction: Agent work -> Gate -> Human review
+    -> Decision -> Audit. This is the only approved flow abstraction for
+    public surfaces -- it does not expose any private strategy/workflow
+    detail. Decision is the human-authority node (teal).
+  -->
+  <div class="flow-wrap">
+    <svg
+      viewBox="0 0 900 140"
+      role="img"
+      aria-label="Flow diagram: Agent work moves through a Gate, then Human review, then Decision, then Audit"
+      style="display: block; width: 100%; height: auto;"
+    >
+      <line x1="40" y1="60" x2="860" y2="60" stroke="#2f383d" stroke-width="2" />
+      <circle cx="40" cy="60" r="8" fill="#5a6469" />
+      <circle cx="245" cy="60" r="9" fill="#1f8a7d" />
+      <circle cx="450" cy="60" r="8" fill="#8b959b" />
+      <circle cx="655" cy="60" r="11" fill="#3fd9c7" />
+      <circle cx="860" cy="60" r="8" fill="#5a6469" />
+      <text x="40" y="104" text-anchor="start" font-family="IBM Plex Mono, monospace" font-size="17" fill="#8b959b">Agent work</text>
+      <text x="245" y="104" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="17" fill="#c6ccd0">Gate</text>
+      <text x="450" y="104" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="17" fill="#8b959b">Human review</text>
+      <text x="655" y="104" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="18" font-weight="600" fill="#f2f4f5">Decision</text>
+      <text x="860" y="104" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="17" fill="#8b959b">Audit</text>
+    </svg>
+  </div>
+</body>
+</html>
