@@ -8,153 +8,395 @@
       name="description"
       content="Human decision-making inside bounded delegation for enterprise workflows. Agents assist; humans decide; the process records why."
     />
+    <link rel="icon" href="./logo/favicon.ico" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
     <style>
       :root {
         color-scheme: dark;
-        --bg: #1a1d24;
-        --text: #e8eaed;
-        --muted: #9aa0a6;
-        --accent: #5ec8e8;
-        --panel: #2a2f38;
+        --bg-page: #07090b;
+        --bg-panel: #0f1215;
+        --line: #232a2e;
+        --line-bright: #2f383d;
+        --teal: #3fd9c7;
+        --teal-dim: #1f4b47;
+        --white: #f2f4f5;
+        --gray: #8b959b;
+        --gray-dim: #5a6469;
       }
       * {
         box-sizing: border-box;
       }
       body {
         margin: 0;
-        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-        background: var(--bg);
-        color: var(--text);
-        line-height: 1.5;
+        font-family: "Space Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg-page);
+        color: var(--white);
+        line-height: 1.55;
       }
-      main {
+
+      /* page-level bracket frame around the whole content column */
+      .page-frame {
+        position: relative;
         max-width: 960px;
         margin: 0 auto;
-        padding: 2rem 1.25rem 3rem;
+        padding: 1.75rem 1.25rem 3rem;
+      }
+      .page-bracket {
+        position: absolute;
+        width: 18px;
+        height: 18px;
+        border-color: var(--line-bright);
+        border-style: solid;
+        border-width: 0;
+      }
+      .page-bracket.tl {
+        top: 0;
+        left: 0;
+        border-top-width: 1px;
+        border-left-width: 1px;
+      }
+      .page-bracket.tr {
+        top: 0;
+        right: 0;
+        border-top-width: 1px;
+        border-right-width: 1px;
+      }
+      .page-bracket.bl {
+        bottom: 0;
+        left: 0;
+        border-bottom-width: 1px;
+        border-left-width: 1px;
+      }
+      .page-bracket.br {
+        bottom: 0;
+        right: 0;
+        border-bottom-width: 1px;
+        border-right-width: 1px;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        margin-bottom: 2rem;
+      }
+      header img {
+        width: 26px;
+        height: 26px;
+        display: block;
+      }
+      header .brand {
+        font-family: "IBM Plex Mono", ui-monospace, monospace;
+        font-size: 0.8rem;
+        letter-spacing: 0.22em;
+        color: var(--gray);
+      }
+      main {
+        padding-top: 0.5rem;
       }
       h1 {
-        font-size: clamp(1.5rem, 4vw, 2rem);
-        font-weight: 600;
-        margin: 0 0 0.35rem;
+        font-size: clamp(2.25rem, 7vw, 4.5rem);
+        font-weight: 700;
+        margin: 0;
         letter-spacing: -0.02em;
       }
+      .accent-rule {
+        width: 64px;
+        height: 3px;
+        background: var(--teal);
+        margin: 1.1rem 0 1.5rem;
+      }
       .subtitle {
-        color: var(--accent);
-        font-size: 1.05rem;
+        color: var(--white);
+        font-size: 1.15rem;
+        font-weight: 600;
         margin: 0 0 0.75rem;
       }
       .caption {
-        color: var(--text);
+        color: var(--gray);
         font-size: 1rem;
         max-width: 42rem;
         margin: 0 0 0.75rem;
       }
       .supporting {
-        color: var(--muted);
+        color: var(--gray);
         font-size: 0.95rem;
         max-width: 42rem;
-        margin: 0 0 1.75rem;
+        margin: 0 0 2rem;
       }
-      figure {
-        margin: 0;
-        background: var(--panel);
-        border-radius: 12px;
-        padding: 1rem;
-        border: 1px solid #3d4450;
+
+      /* beaded authority thread, aligned to the process-flow node x-positions below */
+      .thread-wrap {
+        padding: 0 1.5rem;
+        margin-bottom: 0.5rem;
       }
-      figure img {
+      .authority-thread {
         display: block;
         width: 100%;
         height: auto;
-        border-radius: 8px;
+      }
+
+      .panel {
+        position: relative;
+        margin: 0;
+        background: var(--bg-panel);
+        border-radius: 2px;
+        border: 1px solid var(--line);
+        padding: 1.5rem;
+      }
+      .bracket {
+        position: absolute;
+        width: 14px;
+        height: 14px;
+        border-color: var(--line-bright);
+        border-style: solid;
+        border-width: 0;
+      }
+      .bracket.tl {
+        top: 10px;
+        left: 10px;
+        border-top-width: 1px;
+        border-left-width: 1px;
+      }
+      .bracket.tr {
+        top: 10px;
+        right: 10px;
+        border-top-width: 1px;
+        border-right-width: 1px;
+      }
+      .bracket.bl {
+        bottom: 10px;
+        left: 10px;
+        border-bottom-width: 1px;
+        border-left-width: 1px;
+      }
+      .bracket.br {
+        bottom: 10px;
+        right: 10px;
+        border-bottom-width: 1px;
+        border-right-width: 1px;
+      }
+      figure {
+        margin: 0;
+      }
+      .process-flow-desktop {
+        display: block;
+        width: 100%;
+        height: auto;
       }
       figcaption {
         margin-top: 0.75rem;
-        font-size: 0.85rem;
-        color: var(--muted);
+        font-family: "IBM Plex Mono", ui-monospace, monospace;
+        font-size: 0.78rem;
+        letter-spacing: 0.02em;
+        color: var(--gray);
         text-align: center;
       }
+
+      /* mobile vertical process list: hidden on desktop, real CSS font-sizes (not viewBox-scaled) */
+      .process-flow-mobile {
+        display: none;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        flex-direction: column;
+        gap: 0.6rem;
+      }
+      .process-flow-mobile li {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        font-family: "IBM Plex Mono", ui-monospace, monospace;
+        font-size: 14px;
+        color: var(--gray);
+      }
+      .process-flow-mobile li .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--gray-dim);
+        flex: 0 0 auto;
+      }
+      .process-flow-mobile li.decision {
+        color: var(--white);
+        font-weight: 600;
+      }
+      .process-flow-mobile li.decision .dot {
+        width: 10px;
+        height: 10px;
+        background: var(--teal);
+      }
+
       .proof {
-        margin-top: 2rem;
-        padding: 1.25rem;
-        border-radius: 10px;
-        background: var(--panel);
-        border: 1px solid #3d4450;
+        margin-top: 1.75rem;
       }
       .proof h2 {
-        font-size: 1.1rem;
+        font-family: "IBM Plex Mono", ui-monospace, monospace;
+        font-size: 0.78rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
         font-weight: 600;
-        margin: 0 0 0.75rem;
+        color: var(--gray);
+        margin: 0 0 1rem;
       }
-      .proof p {
-        margin: 0 0 0.75rem;
+      .proof ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
       }
-      .proof p:last-child {
-        margin-bottom: 0;
+      .proof li {
+        font-size: 1rem;
+        font-weight: 500;
+        line-height: 1.4;
+        padding-left: 1rem;
+        border-left: 2px solid var(--teal-dim);
+        color: var(--gray);
+      }
+      .proof li.active {
+        border-left-color: var(--teal);
+        color: var(--white);
       }
       nav {
-        margin-top: 1.5rem;
-        font-size: 0.9rem;
+        margin-top: 1.75rem;
+        font-family: "IBM Plex Mono", ui-monospace, monospace;
+        font-size: 0.85rem;
+        border-top: 1px solid var(--line);
+        padding-top: 1.25rem;
       }
       nav a {
-        color: var(--accent);
+        color: var(--teal);
         text-decoration: none;
       }
       nav a:hover {
         text-decoration: underline;
       }
       nav span {
-        color: var(--muted);
+        color: var(--gray-dim);
         margin: 0 0.5rem;
+      }
+
+      @media (max-width: 640px) {
+        .process-flow-desktop,
+        .thread-wrap {
+          display: none;
+        }
+        .process-flow-mobile {
+          display: flex;
+        }
       }
     </style>
   </head>
   <body>
-    <main>
-      <h1>Kidweel</h1>
-      <p class="subtitle">Human decision-making inside bounded delegation.</p>
-      <p class="caption">
-        Agents assist. Humans decide. The process records why.
-      </p>
-      <p class="supporting">
-        A live paper-trading automation capstone translated into a portable
-        control pattern for enterprise workflows.
-      </p>
+    <div class="page-frame">
+      <div class="page-bracket tl"></div>
+      <div class="page-bracket tr"></div>
+      <div class="page-bracket bl"></div>
+      <div class="page-bracket br"></div>
 
-      <figure>
-        <img
-          src="./kidweel_subagency_map.png"
-          width="1536"
-          height="1024"
-          alt="Kidweel Subagency Map: Main coordinator delegates repo-cleaner, readme-editor, safety-auditor, and claude-advisor to bounded reference leaves"
-        />
-        <figcaption>
-          Coordinator-directed skills · no nested spawning · stop on missing context
-        </figcaption>
-      </figure>
+      <header>
+        <img src="./logo/kidweel-mark.svg" alt="Kidweel" />
+        <span class="brand">KIDWEEL</span>
+      </header>
+      <main>
+        <h1>Kidweel</h1>
+        <div class="accent-rule"></div>
+        <p class="subtitle">Human decision-making inside bounded delegation.</p>
+        <p class="caption">
+          Agents assist. Humans decide. The process records why.
+        </p>
+        <p class="supporting">
+          A live paper-trading automation capstone translated into a portable
+          control pattern for enterprise workflows.
+        </p>
 
-      <section class="proof" aria-label="Subagency proof">
-        <h2>Subagency Proof</h2>
-        <p>
-          Kidweel demonstrates bounded delegation for enterprise workflows.
-        </p>
-        <p>
-          Agents inspect, classify, summarize, and propose. They do not inherit
-          authority to approve, route, submit, or escalate.
-        </p>
-        <p>
-          Human review stays in the decision path. The audit trail records the
-          handoff.
-        </p>
-      </section>
+        <div class="thread-wrap">
+          <svg
+            class="authority-thread"
+            viewBox="0 0 900 20"
+            aria-hidden="true"
+          >
+            <line x1="40" y1="10" x2="860" y2="10" stroke="#2f383d" stroke-width="1" />
+            <circle cx="40" cy="10" r="3" fill="#5a6469" />
+            <circle cx="245" cy="10" r="3" fill="#5a6469" />
+            <circle cx="450" cy="10" r="3" fill="#5a6469" />
+            <circle cx="655" cy="10" r="4" fill="#3fd9c7" />
+            <circle cx="860" cy="10" r="3" fill="#5a6469" />
+          </svg>
+        </div>
 
-      <nav aria-label="Repository links">
-        <a href="https://github.com/vadeonebx/kidweel-capstone">Repository</a>
-        <span>·</span>
-        <a href="../docs/subagency-proof.md">Subagency proof</a>
-        <span>·</span>
-        <a href="../README.md">README</a>
-      </nav>
-    </main>
+        <div class="panel">
+          <div class="bracket tl"></div>
+          <div class="bracket tr"></div>
+          <div class="bracket bl"></div>
+          <div class="bracket br"></div>
+          <figure>
+            <svg
+              class="process-flow-desktop"
+              viewBox="0 0 900 140"
+              role="img"
+              aria-label="Flow diagram: Agent work moves through a Gate, then Human review, then Decision, then Audit"
+            >
+              <line x1="40" y1="60" x2="860" y2="60" stroke="#2f383d" stroke-width="2" />
+              <circle cx="40" cy="60" r="8" fill="#5a6469" />
+              <circle cx="245" cy="60" r="9" fill="#1f8a7d" />
+              <circle cx="450" cy="60" r="8" fill="#8b959b" />
+              <circle cx="655" cy="60" r="11" fill="#3fd9c7" />
+              <circle cx="860" cy="60" r="8" fill="#5a6469" />
+              <text x="40" y="104" text-anchor="start" font-family="IBM Plex Mono, monospace" font-size="17" fill="#8b959b">Agent work</text>
+              <text x="245" y="104" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="17" fill="#c6ccd0">Gate</text>
+              <text x="450" y="104" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="17" fill="#8b959b">Human review</text>
+              <text x="655" y="104" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="18" font-weight="600" fill="#f2f4f5">Decision</text>
+              <text x="860" y="104" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="17" fill="#8b959b">Audit</text>
+            </svg>
+
+            <ol
+              class="process-flow-mobile"
+              aria-label="Flow: Agent work moves through a Gate, then Human review, then Decision, then Audit"
+            >
+              <li><span class="dot"></span>Agent work</li>
+              <li><span class="dot"></span>Gate</li>
+              <li><span class="dot"></span>Human review</li>
+              <li class="decision"><span class="dot"></span>Decision</li>
+              <li><span class="dot"></span>Audit</li>
+            </ol>
+
+            <figcaption>
+              Agent work moves through a gate before any human decision is recorded.
+            </figcaption>
+          </figure>
+        </div>
+
+        <section class="proof panel" aria-label="Subagency proof">
+          <div class="bracket tl"></div>
+          <div class="bracket tr"></div>
+          <div class="bracket bl"></div>
+          <div class="bracket br"></div>
+          <h2>Subagency Proof</h2>
+          <ul>
+            <li class="active">Agents handle scoped work.</li>
+            <li>Humans retain decision authority.</li>
+            <li>Audit trails record the path.</li>
+          </ul>
+        </section>
+
+        <nav aria-label="Repository links">
+          <a href="https://github.com/vadeonebx/kidweel-capstone">Repository</a>
+          <span>·</span>
+          <a href="../docs/subagency-proof.md">Subagency proof</a>
+          <span>·</span>
+          <a href="../README.md">README</a>
+          <span>·</span>
+          <a href="./linkedin-carousel/README.md">LinkedIn carousel</a>
+        </nav>
+      </main>
+    </div>
   </body>
 </html>
