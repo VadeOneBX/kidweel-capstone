@@ -1,4 +1,4 @@
-"""Load SpotGamma exports by detected profile (CSV/XLSX), not legacy header assumptions."""
+"""Load vendor scanner exports by detected profile (CSV/XLSX), not legacy header assumptions."""
 
 from __future__ import annotations
 

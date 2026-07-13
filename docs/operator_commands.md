@@ -4,7 +4,7 @@ Remote scheduling, Tailscale/SSH, push notifications, Docker cron templates, and
 
 **Tests by morning-loop phase (uv + Docker):** [operator_test_commands_morning_loop.md](./operator_test_commands_morning_loop.md).
 
-**Surfaces:** Commands below run on the **operator runtime boundary** (host shell or SSH via Tailscale)—not in Claude.ai, Claude mobile, or Cursor mobile chat. Those surfaces review artifacts or apply scoped repo edits; they do not approve, submit, or bypass gates. Taxonomy: [CLAUDE.md](../CLAUDE.md#surface-taxonomy-authority-matters).
+**Surfaces:** Commands below run on the **operator runtime boundary** (host shell or SSH via Tailscale)—not in chat review surfaces or mobile IDE chats. Those surfaces review artifacts or apply scoped repo edits; they do not approve, submit, or bypass gates. Taxonomy: [CLAUDE.md](../CLAUDE.md#surface-taxonomy-authority-matters).
 
 ## Host setup (uv + optional Docker)
 
@@ -75,7 +75,7 @@ Priority (highest wins):
 Clarify:
 
 - Missing or unparsed AM-note / workbook prose **does not block** the morning loop; it reduces confidence and emits warnings.
-- Alpaca credential errors park **hydration** only; they are not macro-context failures.
+- Market-data credential errors park **hydration** only; they are not macro-context failures.
 - Authoritative operator lanes live on `morning_regime_status` (upstream readiness spine).
 
 ```bash
@@ -126,7 +126,7 @@ uv run python scripts/operator_status.py --base-dir . --run-id 2026-07-13-manual
 
 ## View advisory brief (deterministic artifact)
 
-Morning brief from `qops.advisory.claude_brief`—not claude-advisor skill output. Review on host or via Tailscale; Claude.ai / Claude mobile are visibility surfaces only.
+Morning brief from `qops.advisory.claude_brief`—not claude-advisor skill output. Review on host or via Tailscale; chat review surfaces are visibility-only.
 
 ```bash
 cat data/advisory/latest_claude_brief.md
@@ -210,7 +210,7 @@ git check-ignore -v private/raw/*.pdf
 |--------|----------------|
 | Regenerate morning advisory artifact | `uv run python scripts/orb_morning_loop.py --mode manual --base-dir .` |
 | View readiness (read-only) | `uv run python scripts/operator_status.py --base-dir . --readiness` |
-| Diagnose Alpaca market-data credentials | `uv run python scripts/alpaca_fetch.py --env-check` |
+| Diagnose market-data credentials | `uv run python scripts/alpaca_fetch.py --env-check` |
 
 Hydration retry is not a separate CLI. Quote hydration runs inside the morning loop pipeline; after credentials/data are fixed, regenerate with `orb_morning_loop.py`.
 

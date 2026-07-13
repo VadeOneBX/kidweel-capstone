@@ -1,4 +1,4 @@
-"""Normalize SpotGamma profile loads into replay-corpus context rows."""
+"""Normalize vendor scanner profile loads into replay-corpus context rows."""
 
 from __future__ import annotations
 
