@@ -116,9 +116,12 @@ uv run python scripts/operator_status.py --base-dir .
 
 ## Check readiness lanes (morning_regime_status)
 
+`--run-id` takes the **full run id string** from the morning loop / manifest
+(e.g. `2026-07-13-manual-164239`), not only the numeric time suffix or date digits.
+
 ```bash
 uv run python scripts/operator_status.py --base-dir . --readiness
-uv run python scripts/operator_status.py --base-dir . --run-id <run_id> --readiness
+uv run python scripts/operator_status.py --base-dir . --run-id 2026-07-13-manual-164239 --readiness
 ```
 
 ## View advisory brief (deterministic artifact)

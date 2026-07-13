@@ -51,13 +51,19 @@ _SPY_HISTORY_HEADERS: dict[str, str] = {
     "options implied move": "options_implied_move",
     "dpi": "dpi",
     "% dpi volume": "pct_dpi_volume",
+    "5 day dpi": "dpi_5d",
     "5d % dpi volume": "pct_dpi_volume_5d",
 }
 
-_SQUEEZE_HEADERS: dict[str, str] = {
+# Full daily scanner schema (squeeze / vrp / reverse-vrp). Thin legacy VRP
+# exports are a subset; unmapped columns are simply absent after rename.
+_SCANNER_HEADERS: dict[str, str] = {
     "symbol": "symbol",
     "current price": "current_price",
+    "previous close": "previous_close",
     "stock volume": "stock_volume",
+    "52 week high": "week_52_high",
+    "52 week low": "week_52_low",
     "earnings date": "earnings_date",
     "key gamma strike": "key_gamma_strike",
     "key delta strike": "key_delta_strike",
@@ -65,39 +71,37 @@ _SQUEEZE_HEADERS: dict[str, str] = {
     "call wall": "call_wall",
     "put wall": "put_wall",
     "options impact": "options_impact",
+    "call gamma": "call_gamma",
+    "put gamma": "put_gamma",
     "next exp gamma": "next_exp_gamma",
     "next exp delta": "next_exp_delta",
     "top gamma exp": "top_gamma_exp",
     "top delta exp": "top_delta_exp",
+    "call volume": "call_volume",
+    "put volume": "put_volume",
+    "next exp call vol": "next_exp_call_vol",
+    "next exp put vol": "next_exp_put_vol",
     "put/call oi ratio": "put_call_oi_ratio",
     "volume ratio": "volume_ratio",
     "gamma ratio": "gamma_ratio",
     "delta ratio": "delta_ratio",
-}
-
-_VRP_HEADERS: dict[str, str] = {
-    "symbol": "symbol",
-    "current price": "current_price",
-    "earnings date": "earnings_date",
-    "key gamma strike": "key_gamma_strike",
-    "key delta strike": "key_delta_strike",
-    "hedge wall": "hedge_wall",
-    "call wall": "call_wall",
-    "put wall": "put_wall",
-    "options impact": "options_impact",
     "ne skew": "ne_skew",
     "skew": "skew",
     "1 m rv": "one_month_rv",
     "1 m iv": "one_month_iv",
     "iv rank": "iv_rank",
     "garch rank": "garch_rank",
+    "skew rank": "skew_rank",
     "options implied move": "options_implied_move",
+    "dpi": "dpi",
+    "% dpi volume": "pct_dpi_volume",
+    "5 day dpi": "dpi_5d",
+    "5d % dpi volume": "pct_dpi_volume_5d",
 }
 
-# Reverse-VRP scanner export (explicit map; same canonical fields as VRP).
-_REVERSE_VRP_HEADERS: dict[str, str] = {
-    **_VRP_HEADERS,
-}
+_SQUEEZE_HEADERS: dict[str, str] = dict(_SCANNER_HEADERS)
+_VRP_HEADERS: dict[str, str] = dict(_SCANNER_HEADERS)
+_REVERSE_VRP_HEADERS: dict[str, str] = dict(_SCANNER_HEADERS)
 
 
 def normalize_header_label(name: object) -> str:
@@ -136,17 +140,46 @@ def detect_spy_excel_profile(columns: list[object]) -> bool:
     return detect_csv_profile(columns) == "spy_history"
 
 
+def _scanner_profile_hint_from_filename(path: Path) -> ExportProfile | None:
+    """Prefer filename when daily scanner schemas have converged."""
+    stem = re.sub(r"^\d{4}-\d{2}-\d{2}_", "", path.stem.lower())
+    stem = stem.replace("-", "_")
+    if stem == "squeeze":
+        return "squeeze"
+    if "reverse_vrp" in stem:
+        return "reverse_vrp"
+    if stem == "vrp":
+        return "vrp"
+    return None
+
+
 def detect_xlsx_profile(columns: list[object], *, path: Path) -> ExportProfile | None:
     if is_spy_excel_filename(path) and detect_spy_excel_profile(columns):
         return "spy_excel"
     keys = {normalize_header_label(c) for c in columns}
-    if "symbol" in keys and "gamma ratio" in keys and "1 m iv" not in keys and "stock volume" in keys:
+    if "symbol" not in keys:
+        return None
+
+    hint = _scanner_profile_hint_from_filename(path)
+    has_key_levels = "call wall" in keys or "key gamma strike" in keys
+    has_vol = "1 m iv" in keys and "iv rank" in keys
+    has_squeeze_markers = "gamma ratio" in keys and "stock volume" in keys
+
+    # Modern full-schema exports share columns; filename is authoritative.
+    if hint == "squeeze" and (has_squeeze_markers or has_key_levels):
         return "squeeze"
-    if "symbol" in keys and "1 m iv" in keys and "iv rank" in keys:
-        name = path.name.lower()
-        if "reverse" in name:
-            return "reverse_vrp"
+    if hint == "reverse_vrp" and (has_vol or has_key_levels):
+        return "reverse_vrp"
+    if hint == "vrp" and (has_vol or has_key_levels):
         return "vrp"
+
+    # Legacy fallbacks for oddly named files.
+    if has_squeeze_markers and "1 m iv" not in keys:
+        return "squeeze"
+    if has_vol:
+        return "vrp"
+    if has_squeeze_markers:
+        return "squeeze"
     return None
 
 

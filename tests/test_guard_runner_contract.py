@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from qops.risk.guard_runner import (
     enrich_morning_candidate_export,
@@ -131,6 +132,13 @@ def test_hydrate_gamma_join_and_source_absent() -> None:
                 "gamma_ratio": None,
                 "has_spy_context": True,
             },
+            {
+                "symbol": "ETHA",
+                "trade_date": "2026-06-18",
+                "source_profile": "reverse_vrp",
+                "gamma_ratio": 1.8944,
+                "has_spy_context": True,
+            },
         ]
     )
     context = pd.DataFrame(
@@ -139,12 +147,15 @@ def test_hydrate_gamma_join_and_source_absent() -> None:
     out = hydrate_morning_replay_candidates(base, context)
     squeeze_row = out.loc[out["source_profile"] == "squeeze"].iloc[0]
     vrp_row = out.loc[out["source_profile"] == "vrp"].iloc[0]
-    zzz_row = out.loc[out["source_profile"] == "reverse_vrp"].iloc[0]
+    zzz_row = out.loc[out["symbol"] == "ZZZ"].iloc[0]
+    etha_row = out.loc[out["symbol"] == "ETHA"].iloc[0]
     assert squeeze_row["gamma_ratio_source"] == "squeeze"
     assert float(vrp_row["gamma_ratio"]) == 1.2
     assert vrp_row["gamma_ratio_source"] == "squeeze_join"
     assert zzz_row["gamma_ratio_source"] == "source_absent"
     assert zzz_row["missing_fields"] == ""
+    assert float(etha_row["gamma_ratio"]) == pytest.approx(1.8944)
+    assert etha_row["gamma_ratio_source"] == "reverse_vrp"
     assert str(squeeze_row["regime_label"]) == "SPY"
 
 
