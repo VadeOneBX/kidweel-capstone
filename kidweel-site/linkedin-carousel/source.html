@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Kidweel — Carousel Mockup</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root{
+    --bg-page:#07090b;
+    --bg-panel:#0f1215;
+    --bg-panel-2:#14181c;
+    --line:#232a2e;
+    --line-bright:#2f383d;
+    --teal:#3fd9c7;
+    --teal-dim:#1f4b47;
+    --white:#f2f4f5;
+    --gray:#8b959b;
+    --gray-dim:#5a6469;
+    --s: 2.8421052631578947;
+  }
+
+  *{box-sizing:border-box;}
+
+  body{
+    margin:0;
+    background:var(--bg-page);
+    color:var(--white);
+    font-family:'Space Grotesk', sans-serif;
+    padding:48px 0;
+  }
+
+  .rail-label{
+    text-align:center;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    letter-spacing:0.18em;
+    text-transform:uppercase;
+    color:var(--gray-dim);
+    margin-bottom:28px;
+  }
+
+  .rail{
+    display:flex;
+    gap:28px;
+    overflow-x:auto;
+    padding:12px 48px 60px 48px;
+    scroll-snap-type:x mandatory;
+  }
+
+  .slide-wrap{
+    scroll-snap-align:center;
+    flex:0 0 auto;
+  }
+
+  .slide-meta{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    color:var(--gray-dim);
+    letter-spacing:0.08em;
+    margin-bottom:10px;
+    display:flex;
+    justify-content:space-between;
+    width:380px;
+  }
+
+  .panel{
+    width:380px;
+    height:475px;
+    background:var(--bg-panel);
+    border:1px solid var(--line);
+    border-radius:2px;
+    position:relative;
+    padding:28px;
+    display:flex;
+    flex-direction:column;
+    justify-content:space-between;
+    overflow:hidden;
+  }
+
+  /* corner brackets - blueprint/schematic signature motif */
+  .bracket{
+    position:absolute;
+    width:14px;
+    height:14px;
+    border-color:var(--line-bright);
+    border-style:solid;
+    border-width:0;
+  }
+  .bracket.tl{top:14px;left:14px;border-top-width:1px;border-left-width:1px;}
+  .bracket.tr{top:14px;right:14px;border-top-width:1px;border-right-width:1px;}
+  .bracket.bl{bottom:14px;left:14px;border-bottom-width:1px;border-left-width:1px;}
+  .bracket.br{bottom:14px;right:14px;border-bottom-width:1px;border-right-width:1px;}
+
+  .idx{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    color:var(--gray-dim);
+    letter-spacing:0.1em;
+  }
+
+  .headline{
+    font-size:26px;
+    font-weight:600;
+    line-height:1.28;
+    letter-spacing:-0.01em;
+    margin:18px 0 0 0;
+  }
+
+  .accent-rule{
+    width:36px;
+    height:2px;
+    background:var(--teal);
+    margin:16px 0;
+  }
+
+  .body-block{
+    flex:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    position:relative;
+  }
+
+  .footer-line{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    color:var(--gray);
+    letter-spacing:0.04em;
+    border-top:1px solid var(--line);
+    padding-top:12px;
+  }
+
+  /* ---- Scene 1: noisy tiles ---- */
+  .tiles{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    width:100%;
+  }
+  .tile{
+    background:var(--bg-panel-2);
+    border:1px solid var(--line);
+    border-left:2px solid var(--gray-dim);
+    padding:12px 14px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12.5px;
+    color:var(--gray);
+  }
+
+  /* ---- Scene 2: shrinking node ---- */
+  .node-big{
+    width:120px;height:120px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #6fe9dd, var(--teal) 55%, var(--teal-dim) 100%);
+    box-shadow:0 0 40px rgba(63,217,199,0.25);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'IBM Plex Mono',monospace;font-size:11px;color:#04211d;font-weight:600;
+  }
+  .shrink-arrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    color:var(--gray-dim);
+    margin-top:14px;
+    letter-spacing:0.1em;
+  }
+
+  /* ---- Scene 3: boxed frame ---- */
+  .frame-outer{
+    width:220px;height:220px;
+    border:1px solid var(--teal);
+    border-radius:4px;
+    position:relative;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .frame-node{
+    width:56px;height:56px;border-radius:50%;
+    background:var(--teal);
+    box-shadow:0 0 24px rgba(63,217,199,0.35);
+  }
+  .guard-label{
+    position:absolute;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:9.5px;
+    letter-spacing:0.08em;
+    color:var(--gray);
+    background:var(--bg-panel);
+    padding:2px 6px;
+  }
+  .guard-top{top:-8px;left:50%;transform:translateX(-50%);}
+  .guard-bottom{bottom:-8px;left:50%;transform:translateX(-50%);}
+  .guard-left{left:-8px;top:50%;transform:translateY(-50%) rotate(0deg);writing-mode:vertical-rl;}
+  .guard-right{right:-8px;top:50%;transform:translateY(-50%);writing-mode:vertical-rl;}
+
+  /* ---- Scene 4: flow ---- */
+  .flow{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    width:100%;
+  }
+  .flow-step{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .flow-dot{
+    width:7px;height:7px;border-radius:50%;
+    background:var(--teal);
+    flex:0 0 auto;
+  }
+  .flow-text{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:13px;
+    color:var(--white);
+  }
+  .flow-connector{
+    width:1px;height:10px;background:var(--line-bright);margin-left:3px;
+  }
+
+  /* ---- Scene 5: callouts ---- */
+  .callouts{
+    display:flex;
+    flex-direction:column;
+    gap:18px;
+    width:100%;
+  }
+  .callout{
+    font-size:17px;
+    font-weight:500;
+    line-height:1.4;
+    padding-left:14px;
+    border-left:2px solid var(--teal-dim);
+  }
+  .callout.active{
+    border-left:2px solid var(--teal);
+    color:var(--white);
+  }
+
+  /* ---- Scene 6: system + thesis ---- */
+  .mini-system{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+    margin-bottom:22px;
+  }
+  .mini-dot{width:6px;height:6px;border-radius:50%;background:var(--gray-dim);}
+  .mini-dot.on{background:var(--teal);}
+  .mini-line{width:14px;height:1px;background:var(--line-bright);}
+
+  .thesis{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:13px;
+    line-height:1.9;
+    color:var(--gray);
+    text-align:center;
+  }
+  .thesis b{color:var(--white);font-weight:500;}
+
+  /* ==========================================================
+     EXPORT MODE — inert unless body.export-mode is applied.
+     Renders a single isolated panel at native 1080x1350 for
+     LinkedIn carousel export. Toggled by the export script via
+     Playwright, not by any script in this file.
+     ========================================================== */
+  body.export-mode{ padding:0; }
+  body.export-mode .rail-label,
+  body.export-mode .slide-meta{ display:none; }
+  body.export-mode .rail{ display:block; padding:0; gap:0; overflow:visible; }
+  body.export-mode .slide-wrap{ margin:0; }
+
+  body.export-mode .panel{
+    width:1080px;
+    height:1350px;
+    padding:calc(28px * var(--s));
+  }
+
+  body.export-mode .bracket{
+    width:calc(14px * var(--s));
+    height:calc(14px * var(--s));
+  }
+  body.export-mode .bracket.tl{top:calc(14px * var(--s));left:calc(14px * var(--s));border-top-width:calc(1px * var(--s));border-left-width:calc(1px * var(--s));}
+  body.export-mode .bracket.tr{top:calc(14px * var(--s));right:calc(14px * var(--s));border-top-width:calc(1px * var(--s));border-right-width:calc(1px * var(--s));}
+  body.export-mode .bracket.bl{bottom:calc(14px * var(--s));left:calc(14px * var(--s));border-bottom-width:calc(1px * var(--s));border-left-width:calc(1px * var(--s));}
+  body.export-mode .bracket.br{bottom:calc(14px * var(--s));right:calc(14px * var(--s));border-bottom-width:calc(1px * var(--s));border-right-width:calc(1px * var(--s));}
+
+  body.export-mode .idx{ font-size:calc(11px * var(--s)); }
+
+  body.export-mode .headline{
+    font-size:calc(26px * var(--s));
+    margin-top:calc(18px * var(--s));
+  }
+
+  body.export-mode .accent-rule{
+    width:calc(36px * var(--s));
+    height:calc(2px * var(--s));
+    margin:calc(16px * var(--s)) 0;
+  }
+
+  body.export-mode .footer-line{
+    font-size:calc(11px * var(--s));
+    padding-top:calc(12px * var(--s));
+    border-top-width:calc(1px * var(--s));
+  }
+
+  body.export-mode .tiles{ gap:calc(8px * var(--s)); }
+  body.export-mode .tile{
+    border-width:1px calc(1px * var(--s)) 1px 1px;
+    border-left-width:calc(2px * var(--s));
+    padding:calc(12px * var(--s)) calc(14px * var(--s));
+    font-size:calc(12.5px * var(--s));
+  }
+
+  body.export-mode .node-big{
+    width:calc(120px * var(--s));
+    height:calc(120px * var(--s));
+    font-size:calc(11px * var(--s));
+  }
+  body.export-mode .shrink-arrow{
+    font-size:calc(11px * var(--s));
+    margin-top:calc(14px * var(--s));
+  }
+
+  body.export-mode .frame-outer{
+    width:calc(220px * var(--s));
+    height:calc(220px * var(--s));
+    border-width:calc(1px * var(--s));
+  }
+  body.export-mode .frame-node{
+    width:calc(56px * var(--s));
+    height:calc(56px * var(--s));
+  }
+  body.export-mode .guard-label{
+    font-size:calc(9.5px * var(--s));
+    padding:calc(2px * var(--s)) calc(6px * var(--s));
+  }
+  body.export-mode .guard-top{ top:calc(-8px * var(--s)); }
+  body.export-mode .guard-bottom{ bottom:calc(-8px * var(--s)); }
+  body.export-mode .guard-left{ left:calc(-8px * var(--s)); }
+  body.export-mode .guard-right{ right:calc(-8px * var(--s)); }
+
+  body.export-mode .flow{ gap:calc(10px * var(--s)); }
+  body.export-mode .flow-step{ gap:calc(10px * var(--s)); }
+  body.export-mode .flow-dot{
+    width:calc(7px * var(--s));
+    height:calc(7px * var(--s));
+  }
+  body.export-mode .flow-text{ font-size:calc(13px * var(--s)); }
+  body.export-mode .flow-connector{
+    width:calc(1px * var(--s));
+    height:calc(10px * var(--s));
+    margin-left:calc(3px * var(--s));
+  }
+
+  body.export-mode .callouts{ gap:calc(18px * var(--s)); }
+  body.export-mode .callout{
+    font-size:calc(17px * var(--s));
+    padding-left:calc(14px * var(--s));
+    border-left-width:calc(2px * var(--s));
+  }
+  body.export-mode .callout.active{ border-left-width:calc(2px * var(--s)); }
+
+  body.export-mode .mini-system{
+    gap:calc(6px * var(--s));
+    margin-bottom:calc(22px * var(--s));
+  }
+  body.export-mode .mini-dot{
+    width:calc(6px * var(--s));
+    height:calc(6px * var(--s));
+  }
+  body.export-mode .mini-line{
+    width:calc(14px * var(--s));
+    height:calc(1px * var(--s));
+  }
+  body.export-mode .thesis{ font-size:calc(13px * var(--s)); }
+
+</style>
+</head>
+<body>
+
+  <div class="rail-label">Kidweel — LinkedIn Carousel Mockup — 6 Panels — Portrait 1080×1350 (scaled preview)</div>
+
+  <div class="rail">
+
+    <!-- SCENE 1 -->
+    <div class="slide-wrap">
+      <div class="slide-meta"><span>SCENE 1 — THE USUAL PLAYBOOK</span><span>01 / 06</span></div>
+      <div class="panel">
+        <div class="bracket tl"></div><div class="bracket tr"></div><div class="bracket bl"></div><div class="bracket br"></div>
+        <div>
+          <div class="idx">KIDWEEL</div>
+          <div class="headline">Most people are building louder systems.</div>
+        </div>
+        <div class="accent-rule"></div>
+        <div class="body-block">
+          <div class="tiles">
+            <div class="tile">Prompting for answers</div>
+            <div class="tile">Generic agent demos</div>
+            <div class="tile">Tool wiring called automation</div>
+          </div>
+        </div>
+        <div class="footer-line">01 — the category problem</div>
+      </div>
+    </div>
+
+    <!-- SCENE 2 -->
+    <div class="slide-wrap">
+      <div class="slide-meta"><span>SCENE 2 — THE BREAK</span><span>02 / 06</span></div>
+      <div class="panel">
+        <div class="bracket tl"></div><div class="bracket tr"></div><div class="bracket bl"></div><div class="bracket br"></div>
+        <div>
+          <div class="idx">KIDWEEL</div>
+          <div class="headline">The point is not more model power.</div>
+        </div>
+        <div class="accent-rule"></div>
+        <div class="body-block" style="flex-direction:column;">
+          <div class="node-big">MODEL</div>
+          <div class="shrink-arrow">↓ made less powerful than the process</div>
+        </div>
+        <div class="footer-line">02 — the conceptual turn</div>
+      </div>
+    </div>
+
+    <!-- SCENE 3 -->
+    <div class="slide-wrap">
+      <div class="slide-meta"><span>SCENE 3 — ALWAYS ON, NEVER IN CHARGE</span><span>03 / 06</span></div>
+      <div class="panel">
+        <div class="bracket tl"></div><div class="bracket tr"></div><div class="bracket bl"></div><div class="bracket br"></div>
+        <div>
+          <div class="idx">KIDWEEL</div>
+          <div class="headline">Agents, always on. Never in charge.</div>
+        </div>
+        <div class="accent-rule"></div>
+        <div class="body-block">
+          <div class="frame-outer">
+            <span class="guard-label guard-top">ROLE</span>
+            <span class="guard-label guard-bottom">REVIEW POSTURE</span>
+            <span class="guard-label guard-left">LANGUAGE</span>
+            <span class="guard-label guard-right">GATES</span>
+            <div class="frame-node"></div>
+          </div>
+        </div>
+        <div class="footer-line">measured work, retained authority</div>
+      </div>
+    </div>
+
+    <!-- SCENE 4 -->
+    <div class="slide-wrap">
+      <div class="slide-meta"><span>SCENE 4 — WHAT THE BOX DOES</span><span>04 / 06</span></div>
+      <div class="panel">
+        <div class="bracket tl"></div><div class="bracket tr"></div><div class="bracket bl"></div><div class="bracket br"></div>
+        <div>
+          <div class="idx">KIDWEEL</div>
+          <div class="headline">The process has authority.</div>
+        </div>
+        <div class="accent-rule"></div>
+        <div class="body-block">
+          <div class="flow">
+            <div class="flow-step"><div class="flow-dot"></div><div class="flow-text">Context</div></div>
+            <div class="flow-connector"></div>
+            <div class="flow-step"><div class="flow-dot"></div><div class="flow-text">Candidate</div></div>
+            <div class="flow-connector"></div>
+            <div class="flow-step"><div class="flow-dot"></div><div class="flow-text">Gate</div></div>
+            <div class="flow-connector"></div>
+            <div class="flow-step"><div class="flow-dot"></div><div class="flow-text">Review</div></div>
+            <div class="flow-connector"></div>
+            <div class="flow-step"><div class="flow-dot"></div><div class="flow-text">Decision</div></div>
+            <div class="flow-connector"></div>
+            <div class="flow-step"><div class="flow-dot"></div><div class="flow-text">Audit</div></div>
+          </div>
+        </div>
+        <div class="footer-line">04 — the system, legible in one glance</div>
+      </div>
+    </div>
+
+    <!-- SCENE 5 -->
+    <div class="slide-wrap">
+      <div class="slide-meta"><span>SCENE 5 — WHY IT MATTERS</span><span>05 / 06</span></div>
+      <div class="panel">
+        <div class="bracket tl"></div><div class="bracket tr"></div><div class="bracket bl"></div><div class="bracket br"></div>
+        <div>
+          <div class="idx">KIDWEEL</div>
+          <div class="headline">Attractive is not approved.</div>
+        </div>
+        <div class="accent-rule"></div>
+        <div class="body-block">
+          <div class="callouts">
+            <div class="callout active">Attractive is not approved.</div>
+            <div class="callout">Designated is still reviewed.</div>
+            <div class="callout">Rejection is evidence.</div>
+          </div>
+        </div>
+        <div class="footer-line">05 — the operating doctrine</div>
+      </div>
+    </div>
+
+    <!-- SCENE 6 -->
+    <div class="slide-wrap">
+      <div class="slide-meta"><span>SCENE 6 — THE RESULT</span><span>06 / 06</span></div>
+      <div class="panel">
+        <div class="bracket tl"></div><div class="bracket tr"></div><div class="bracket bl"></div><div class="bracket br"></div>
+        <div>
+          <div class="idx">KIDWEEL</div>
+          <div class="headline">Kidweel turns agent work into human-reviewed decisions.</div>
+        </div>
+        <div class="accent-rule"></div>
+        <div class="body-block" style="flex-direction:column;">
+          <div class="mini-system">
+            <div class="mini-dot on"></div><div class="mini-line"></div>
+            <div class="mini-dot on"></div><div class="mini-line"></div>
+            <div class="mini-dot on"></div><div class="mini-line"></div>
+            <div class="mini-dot on"></div><div class="mini-line"></div>
+            <div class="mini-dot on"></div><div class="mini-line"></div>
+            <div class="mini-dot on"></div>
+          </div>
+          <div class="thesis"><b>Agents assist.</b><br><b>Humans decide.</b><br>The process records why.</div>
+        </div>
+        <div class="footer-line">06 — brand / product distinction</div>
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>
