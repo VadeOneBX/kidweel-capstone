@@ -228,6 +228,8 @@ def hydrate_morning_replay_candidates(
             if symbol in squeeze_gamma:
                 gamma = squeeze_gamma[symbol]
                 source = "squeeze_join"
+            elif gamma is not None and not pd.isna(gamma):
+                source = profile
             else:
                 source = "source_absent"
         elif gamma is not None and not pd.isna(gamma):

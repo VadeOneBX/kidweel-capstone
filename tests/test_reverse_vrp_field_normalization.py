@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from qops.backtest.spotgamma_replay_builder import build_replay_candidates, candidates_to_dataframe
 from qops.ingest.spotgamma_loader import normalize_header_label
@@ -158,7 +159,24 @@ def test_reverse_vrp_fields_feed_wall_proximity_score() -> None:
 
 
 def test_reverse_vrp_header_normalization_maps_display_columns() -> None:
-    from qops.ingest.spotgamma_loader import _REVERSE_VRP_HEADERS
+    from qops.ingest.spotgamma_loader import _REVERSE_VRP_HEADERS, _SCANNER_HEADERS
 
     assert _REVERSE_VRP_HEADERS[normalize_header_label("Call Wall")] == "call_wall"
     assert _REVERSE_VRP_HEADERS[normalize_header_label("1 M IV")] == "one_month_iv"
+    assert _REVERSE_VRP_HEADERS[normalize_header_label("Gamma Ratio")] == "gamma_ratio"
+    assert _REVERSE_VRP_HEADERS[normalize_header_label("Put/Call OI\xa0Ratio")] == "put_call_oi_ratio"
+    assert _SCANNER_HEADERS == _REVERSE_VRP_HEADERS
+
+
+def test_reverse_vrp_maps_gamma_ratio_when_present() -> None:
+    series = _reverse_vrp_series()
+    series["gamma_ratio"] = 1.8944
+    series["delta_ratio"] = -1.6585
+    series["put_call_oi_ratio"] = 0.853
+    series["volume_ratio"] = 0.4344
+    ctx = context_from_vrp_row(series, profile="reverse_vrp", session_date="2026-06-18")
+    assert ctx.gamma_ratio == pytest.approx(1.8944)
+    assert "gamma_ratio" not in ctx.missing_fields
+    candidates = build_replay_candidates([ctx])
+    assert candidates[0].gamma_ratio == pytest.approx(1.8944)
+    assert candidates[0].delta_ratio == pytest.approx(-1.6585)
